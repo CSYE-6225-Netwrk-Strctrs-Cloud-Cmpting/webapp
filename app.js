@@ -1,7 +1,7 @@
 const express = require('express');
 const app = express();
 const healthCheckRoutes = require('./routes/healthCheckRoutes');
-const HealthCheck = require('./models/healthCheck'); 
+const {HealthCheck} = require('./models'); 
 
 // Step 3: Middleware to parse JSON bodies
 app.use(express.json());
@@ -30,6 +30,11 @@ HealthCheck.sync().then(() => {
 }).catch(err => console.error('Error syncing database:', err));
 
 // Start the server
-app.listen(8080, () => {
-  console.log('Server is running on http://localhost:8080');
-});
+if(process.env.NODE_ENV !== "test"){
+  app.listen(8080, () => {
+    console.log('Server is running on http://localhost:8080');
+  });
+}
+
+
+module.exports = app;

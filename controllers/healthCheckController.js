@@ -1,4 +1,4 @@
-const HealthCheck = require('../models/healthCheck');
+const {HealthCheck} = require('../models');
 
 const healthCheckController = async (req, res) => {
   // Step 6: Allow only GET method

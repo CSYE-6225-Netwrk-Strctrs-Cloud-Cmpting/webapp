@@ -25,4 +25,4 @@ const HealthCheck = sequelize.define('HealthCheck', {
   timestamps: false, // Don't use Sequelize's default timestamps (createdAt, updatedAt)
 });
 
-module.exports = HealthCheck;
+module.exports = {sequelize,HealthCheck};
