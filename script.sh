@@ -22,10 +22,10 @@ sed -i "s/local   all             all                                     peer/l
 systemctl restart postgresql
  
 # Set the password for the 'postgres' user
-sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'password';"
+sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'password123';"
  
 # Create the database 'csye6225'
-su - postgres -c "psql -c 'CREATE DATABASE csyewebapp;'"
+su - postgres -c "psql -c 'CREATE DATABASE csye6225;'"
  
 # Create a new Linux group for the application
 groupadd appgroup

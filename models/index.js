@@ -3,9 +3,9 @@ const sequelize = new Sequelize({
   dialect: 'postgres',
   host: 'localhost',
   username: 'postgres',
-  password: 'password',
-  database: 'postgres',
-  port: 5433,
+  password: 'password123',
+  database: 'csye6225',
+  port: 5432,
 });
 
 const HealthCheck = sequelize.define('HealthCheck', {
