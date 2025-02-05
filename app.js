@@ -3,19 +3,31 @@ const app = express();
 const healthCheckRoutes = require('./routes/healthCheckRoutes');
 const HealthCheck = require('./models/healthCheck'); 
 
-// Middleware to prevent caching
+// Step 3: Middleware to parse JSON bodies
+app.use(express.json());
+
+// Step 3: Middleware to prevent caching
 app.use((req, res, next) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   next();
 });
 
-HealthCheck.sync().then(() => {
-    console.log('HealthCheck table created!');
-  }).catch(err => console.error('Error syncing database:', err));
-  
-
-// Use health check routes
 app.use(healthCheckRoutes);
+
+// Step 3: Error handling for invalid JSON
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError) {
+    // Handle invalid JSON error
+    console.error('Invalid JSON received:', err.message);
+    return res.status(400).json();
+  }
+  next();
+});
+
+// Sync database
+HealthCheck.sync().then(() => {
+  console.log('HealthCheck table created!');
+}).catch(err => console.error('Error syncing database:', err));
 
 // Start the server
 app.listen(8080, () => {
