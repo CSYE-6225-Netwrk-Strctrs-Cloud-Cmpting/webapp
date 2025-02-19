@@ -1,6 +1,6 @@
 # webapp
 
-This is a cloud-native web application with a health check API. It is built using Node.js, Express.js, and PostgreSQL with Sequelize ORM.
+This is a cloud-native web application with a health check API. It is built using Node.js, Express.js, and PostgreSQL with Sequelize ORM framework.
 
 # Prerequisites
 
