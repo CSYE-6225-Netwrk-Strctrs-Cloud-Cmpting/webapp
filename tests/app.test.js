@@ -46,7 +46,7 @@ describe("/healthz endpoint", () => {
   });
  
   it("should return 503 when database insert fails", async () => {
-    const { HealthCheck } = require("../models"); // Import HealthCheck here
+    const { HealthCheck } = require("../models"); // Import HealthCheck 
     HealthCheck.create.mockRejectedValueOnce(new Error("DB error"));
  
     const res = await request(app).get("/healthz");
