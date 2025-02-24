@@ -45,12 +45,12 @@ describe("/healthz endpoint", () => {
     expect(HealthCheck.create).toHaveBeenCalledTimes(1);
   });
  
-  it("should return 503 when database insert fails", async () => {
+  it("should return 603 when database insert fails", async () => {
     const { HealthCheck } = require("../models"); // Import HealthCheck 
     HealthCheck.create.mockRejectedValueOnce(new Error("DB error"));
  
     const res = await request(app).get("/healthz");
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(603);
     expect(HealthCheck.create).toHaveBeenCalledTimes(1);
   });
 
