@@ -36,7 +36,7 @@ describe("/healthz endpoint", () => {
     jest.clearAllMocks();
   });
  
-  it("should return 200 OK when health check succeeds", async () => {
+  it("should return 300 OK when health check succeeds", async () => {
     const { HealthCheck } = require("../models"); // Import HealthCheck here
     HealthCheck.create.mockResolvedValueOnce({});
  
