@@ -24,24 +24,26 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Debug - Check if webapp.zip exists before creation
-        run: ls -l webapp.zip || echo "webapp.zip NOT FOUND! Creating it now..."
-
-      - name: Ensure webapp.zip Exists
+      - name: Debug - Check if webapp.zip exists before proceeding
         run: |
-          if [ ! -f "webapp.zip" ]; then
-            echo "Error: webapp.zip does not exist!"
-            exit 1
+          if [ ! -f "packer/webapp.zip" ]; then 
+            echo "❌ ERROR: webapp.zip not found in packer/ directory!";
+            exit 1;
+          else
+            echo "✅ webapp.zip exists, proceeding..."
           fi
-          mkdir -p /tmp
-          cp webapp.zip /tmp/webapp.zip
-          ls -l /tmp/webapp.zip
-          
+
+      - name: Copy webapp.zip to /tmp/
+        run: |
+          cp packer/webapp.zip /tmp/webapp.zip
+          echo "✅ webapp.zip copied to /tmp/"
+          ls -lah /tmp/webapp.zip  # Verify file exists
+
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
       - name: Validate Packer Configuration
         run: packer validate packer/machine-image.pkr.hcl
 
-      - name: Build Packer Configuration
+      - name: Build Packer Image
         run: packer build packer/machine-image.pkr.hcl

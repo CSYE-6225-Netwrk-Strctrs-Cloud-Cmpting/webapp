@@ -43,8 +43,8 @@ build {
   sources = ["source.amazon-ebs.custom_ami"]
 
   provisioner "file" {
-    source      = "/tmp/webapp.zip" # Your local file
-    destination = "/tmp/webapp.zip" # Target path in the VM
+    source      = "packer/webapp.zip" # Your local file
+    destination = "/tmp/webapp.zip"   # Target path in the VM
   }
 
   provisioner "shell" {
