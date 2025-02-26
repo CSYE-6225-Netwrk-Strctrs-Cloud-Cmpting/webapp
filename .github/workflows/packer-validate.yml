@@ -23,10 +23,11 @@ jobs:
 
       - name: Format Check
         run: |
-          packer fmt packer/machine-image.pkr.hcl
+          packer fmt -check packer/machine-image.pkr.hcl
 
       - name: Validate Packer Configuration
         run: |
+          if [ ! -f "webapp.zip" ]; then echo "Error: webapp.zip does not exist!"; exit 1; fi
           packer validate packer/machine-image.pkr.hcl
-
+          
       
