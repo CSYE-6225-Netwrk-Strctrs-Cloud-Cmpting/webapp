@@ -1,0 +1,49 @@
+name: Packer Build
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Packer
+        uses: hashicorp/setup-packer@v2
+        with:
+          version: latest
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      - name: Debug - Check if webapp.zip exists before proceeding
+        run: |
+          if [ ! -f "packer/webapp.zip" ]; then 
+            echo "❌ ERROR: webapp.zip not found in packer/ directory!";
+            exit 1;
+          else
+            echo "✅ webapp.zip exists, proceeding..."
+          fi
+
+      - name: Copy webapp.zip to /tmp/
+        run: |
+          cp packer/webapp.zip /tmp/webapp.zip
+          echo "✅ webapp.zip copied to /tmp/"
+          ls -lah /tmp/webapp.zip  # Verify file exists
+
+      - name: Initialize Packer
+        run: packer init packer/machine-image.pkr.hcl
+
+      - name: Validate Packer Configuration
+        run: packer validate packer/machine-image.pkr.hcl
+
+      - name: Build Packer Image
+        run: packer build packer/machine-image.pkr.hcl

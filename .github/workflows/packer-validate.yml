@@ -1,0 +1,45 @@
+name: Packer Validation
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Install Packer
+        uses: hashicorp/setup-packer@v2
+        with:
+          version: latest
+
+      - name: Ensure webapp.zip Exists
+        run: |
+          if [ ! -f "packer/webapp.zip" ]; then 
+            echo "❌ ERROR: webapp.zip not found in packer/ directory!";
+            exit 1;
+          else
+            echo "✅ webapp.zip exists, proceeding..."
+          fi
+
+      - name: Copy webapp.zip to /tmp/
+        run: |
+          cp packer/webapp.zip /tmp/webapp.zip
+          echo "✅ webapp.zip copied to /tmp/"
+          ls -lah /tmp/webapp.zip  # Verify file exists
+
+      - name: Initialize Packer
+        run: packer init packer/machine-image.pkr.hcl
+
+      - name: Format Packer Configuration
+        run: |
+          packer fmt -check packer/machine-image.pkr.hcl
+
+      - name: Validate Packer Configuration
+        run: packer validate packer/machine-image.pkr.hcl
+
+      
