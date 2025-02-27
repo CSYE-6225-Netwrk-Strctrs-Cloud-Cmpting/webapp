@@ -48,6 +48,13 @@ jobs:
           AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
           echo "AMI ID created: $AMI_ID"
 
+      - name: Set up Google Cloud SDK  
+        uses: google-github-actions/auth@v2  
+        with:    
+          project_id: ${{ secrets.GCP_PROJECT_ID }}    
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
@@ -56,3 +63,10 @@ jobs:
 
       - name: Build Packer Image
         run: packer build packer/machine-image.pkr.hcl
+
+      - name: Share Image with Another GCP Project
+        run: |
+          IMAGE_NAME=$(gcloud compute images list --filter="name~'packer-gcp-ubuntu-nodejs-*'" --format="value(name)" | head -n1)
+          gcloud compute images add-iam-policy-binding $IMAGE_NAME \
+            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+            --role="roles/compute.imageUser"
