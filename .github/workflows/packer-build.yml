@@ -71,21 +71,24 @@ jobs:
       - name: Build Packer Image
         run: packer build packer/machine-image.pkr.hcl
       
-       # ✅ Extract AMI ID (for AWS)
-      - name: Extract AMI ID
+      - name: Extract AMI ID (AWS)
         run: |
           AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
           echo "AMI ID created: $AMI_ID"
 
-      # ✅ Extract GCP Image Name
       - name: Extract GCP Image Name
         run: |
           IMAGE_NAME=$(gcloud compute images list --filter="name~'packer-gcp-ubuntu-nodejs-*'" --format="value(name)" | head -n1)
+          
+          if [ -z "$IMAGE_NAME" ]; then
+            echo "❌ ERROR: No matching GCP image found!"
+            exit 1
+          fi
+
           echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
 
-      # ✅ Share Image with Another GCP Project
       - name: Share Image with GCP Demo Project
         run: |
           gcloud compute images add-iam-policy-binding $IMAGE_NAME \
-            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+            --member="serviceAccount:${{ secrets.GCP_DEMO_SERVICE_ACCOUNT }}" \
             --role="roles/compute.imageUser"
