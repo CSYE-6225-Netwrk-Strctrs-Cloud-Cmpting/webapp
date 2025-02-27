@@ -4,6 +4,10 @@ packer {
       version = ">= 1.0.0, < 2.0.0"
       source  = "github.com/hashicorp/amazon"
     }
+    googlecompute = {
+      version = ">= 1.0.0, < 2.0.0"
+      source  = "github.com/hashicorp/googlecompute"
+    }
   }
 }
 
@@ -22,12 +26,21 @@ variable "instance_type" {
   default     = "t3.micro"
 }
 
+variable "ami_users" {
+  description = "AWS Account ID for sharing the AMI"
+  default     = ["575108914806"]
+}
+
+locals {
+  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
+}
+
 source "amazon-ebs" "custom_ami" {
   region        = var.aws_region
   profile       = var.aws_profile
   instance_type = var.instance_type
   ami_name      = "custom-ami-{{timestamp}}"
-  ami_users     = ["575108914806"]
+  ami_users     = var.ami_users
   source_ami_filter {
     filters = {
       name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
@@ -40,12 +53,27 @@ source "amazon-ebs" "custom_ami" {
   ssh_username = "ubuntu"
 }
 
+source "googlecompute" "ubuntu_nodejs" {
+  project_id          = "302221195769"
+  source_image        = "ubuntu-2404-noble-amd64-v20250214"
+  source_image_family = "ubuntu-2404-lts-noble"
+  zone                = "us-central1-a"
+  image_name          = "packer-gcp-ubuntu-nodejs-{{timestamp}}"
+  ssh_username        = "ubuntu"
+  machine_type        = "e2-micro"
+  disk_size           = 10
+  disk_type           = "pd-standard"
+}
+
 build {
-  sources = ["source.amazon-ebs.custom_ami"]
+  sources = [
+    "source.amazon-ebs.custom_ami",
+    "source.googlecompute.ubuntu_nodejs"
+  ]
 
   provisioner "file" {
-    source      = "packer/webapp.zip" # Your local file
-    destination = "/tmp/webapp.zip"   # Target path in the VM
+    source      = "packer/webapp.zip" # Ensure this is correct
+    destination = "/tmp/webapp.zip"
   }
 
   provisioner "shell" {
@@ -67,7 +95,7 @@ build {
 
       # Ensure group and user exist
       "sudo groupadd -f csye6225",
-      "sudo useradd -m -g csye6225 -s /bin/bash csye6225 || echo 'User csye6225 already exists'",
+      "sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225 || echo 'User csye6225 already exists'",
 
       # Ensure /opt/webapp exists and extract webapp.zip if it exists
       "sudo mkdir -p /opt/webapp",
