@@ -90,5 +90,5 @@ jobs:
       - name: Share Image with GCP Demo Project
         run: |
           gcloud compute images add-iam-policy-binding $IMAGE_NAME \
-          --member="serviceAccount:secrets.GCP_DEMO_SA_KEY" \
+          --member="serviceAccount:democloud@csye6225-demo-452203.iam.gserviceaccount.com" \
           --role="roles/compute.imageUser"
