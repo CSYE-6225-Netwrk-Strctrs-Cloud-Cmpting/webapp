@@ -38,6 +38,15 @@ jobs:
           cp packer/webapp.zip /tmp/webapp.zip
           echo "✅ webapp.zip copied to /tmp/"
           ls -lah /tmp/webapp.zip  # Verify file exists
+      
+      - name: Build Packer Configuration
+        run: |
+          packer build packer/machine-image.pkr.hcl | tee output.log
+
+      - name: Extract AMI ID
+        run: |
+          AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
+          echo "AMI ID created: $AMI_ID"
 
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
