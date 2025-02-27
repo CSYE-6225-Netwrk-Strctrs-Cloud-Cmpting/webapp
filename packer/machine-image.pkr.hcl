@@ -55,7 +55,7 @@ source "amazon-ebs" "custom_ami" {
 
 source "googlecompute" "ubuntu_nodejs" {
   project_id            = "csye6225-dev-452203"
-  service_account_email = "your-service-account@csye6225-dev-452203.iam.gserviceaccount.com"
+  service_account_email = "devcloud@csye6225-dev-452203.iam.gserviceaccount.com"
   source_image          = "ubuntu-2404-noble-amd64-v20250214"
   source_image_family   = "ubuntu-2404-lts-noble"
   zone                  = "us-central1-a"
