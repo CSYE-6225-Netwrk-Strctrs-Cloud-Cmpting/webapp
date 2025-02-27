@@ -54,7 +54,7 @@ source "amazon-ebs" "custom_ami" {
 }
 
 source "googlecompute" "ubuntu_nodejs" {
-  project_id          = "302221195769"
+  project_id          = "csye6225-dev-452203"
   source_image        = "ubuntu-2404-noble-amd64-v20250214"
   source_image_family = "ubuntu-2404-lts-noble"
   zone                = "us-central1-a"
