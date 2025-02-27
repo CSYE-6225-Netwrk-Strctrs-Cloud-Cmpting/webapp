@@ -27,6 +27,7 @@ source "amazon-ebs" "custom_ami" {
   profile       = var.aws_profile
   instance_type = var.instance_type
   ami_name      = "custom-ami-{{timestamp}}"
+  ami_users     = ["575108914806"]
   source_ami_filter {
     filters = {
       name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
