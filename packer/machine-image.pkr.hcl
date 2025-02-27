@@ -54,15 +54,16 @@ source "amazon-ebs" "custom_ami" {
 }
 
 source "googlecompute" "ubuntu_nodejs" {
-  project_id          = "csye6225-dev-452203"
-  source_image        = "ubuntu-2404-noble-amd64-v20250214"
-  source_image_family = "ubuntu-2404-lts-noble"
-  zone                = "us-central1-a"
-  image_name          = "packer-gcp-ubuntu-nodejs-{{timestamp}}"
-  ssh_username        = "ubuntu"
-  machine_type        = "e2-micro"
-  disk_size           = 10
-  disk_type           = "pd-standard"
+  project_id            = "csye6225-dev-452203"
+  service_account_email = "devcloud@csye6225-dev-452203.iam.gserviceaccount.com"
+  source_image          = "ubuntu-2404-noble-amd64-v20250214"
+  source_image_family   = "ubuntu-2404-lts-noble"
+  zone                  = "us-central1-a"
+  image_name            = "packer-gcp-ubuntu-nodejs-{{timestamp}}"
+  ssh_username          = "ubuntu"
+  machine_type          = "e2-micro"
+  disk_size             = 10
+  disk_type             = "pd-standard"
 }
 
 build {
@@ -85,7 +86,7 @@ build {
       "sudo systemctl start postgresql",
       "sudo systemctl enable postgresql",
 
-      # Ensure PostgreSQL configuration allows password authentication
+      # Fix PostgreSQL Authentication (Change peer to md5)
       "PG_CONF=$(ls /etc/postgresql/*/main/pg_hba.conf) && sudo sed -i 's/local   all             all                                     peer/local   all             all                                     md5/' $PG_CONF",
       "sudo systemctl restart postgresql",
 
