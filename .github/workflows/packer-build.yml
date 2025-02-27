@@ -49,10 +49,18 @@ jobs:
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
 
-      - name: Extract AMI ID
+      # ✅ Authenticate Google Cloud
+      - name: Authenticate Google Cloud SDK
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # ✅ Export GOOGLE_APPLICATION_CREDENTIALS for Packer
+      - name: Export GCP Credentials for Packer
         run: |
-          AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
-          echo "AMI ID created: $AMI_ID"
+          echo '${{ secrets.GCP_SA_KEY }}' > gcp-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$PWD/gcp-key.json" >> $GITHUB_ENV
+
 
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
@@ -62,30 +70,22 @@ jobs:
 
       - name: Build Packer Image
         run: packer build packer/machine-image.pkr.hcl
-
-     # ✅ Set up Google Cloud SDK  
-      - name: Set up Google Cloud SDK  
-        uses: google-github-actions/auth@v2  
-        with:    
-          project_id: ${{ secrets.GCP_PROJECT_ID }}    
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      
+       # ✅ Extract AMI ID (for AWS)
+      - name: Extract AMI ID
+        run: |
+          AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
+          echo "AMI ID created: $AMI_ID"
 
       # ✅ Extract GCP Image Name
       - name: Extract GCP Image Name
         run: |
           IMAGE_NAME=$(gcloud compute images list --filter="name~'packer-gcp-ubuntu-nodejs-*'" --format="value(name)" | head -n1)
-          if [ -z "$IMAGE_NAME" ]; then
-            echo "❌ ERROR: No image found matching filter 'packer-gcp-ubuntu-nodejs-*'"
-            exit 1
-          else
-            echo "✅ Found Image: $IMAGE_NAME"
-            echo "IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          fi
+          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
 
-      # ✅ Share Image with GCP Demo Project
-      - name: Share Image with Another GCP Project
+      # ✅ Share Image with Another GCP Project
+      - name: Share Image with GCP Demo Project
         run: |
-          gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
-            --member="serviceAccount:${{ secrets.GCP_DEMO_SERVICE_ACCOUNT }}" \
-            --role="roles/compute.imageUser" \
-            --project=${{ secrets.GCP_PROJECT_ID }}
+          gcloud compute images add-iam-policy-binding $IMAGE_NAME \
+            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+            --role="roles/compute.imageUser"
