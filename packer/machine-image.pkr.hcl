@@ -34,11 +34,13 @@ variable "ami_users" {
 variable "gcp_project_id" {
   description = "GCP Project ID"
   type        = string
+  default     = "csye6225-dev-452203"
 }
 
 variable "gcp_zone" {
   description = "GCP Zone where the image will be created"
   type        = string
+  default     = "us-central1-a"
 }
 
 locals {
