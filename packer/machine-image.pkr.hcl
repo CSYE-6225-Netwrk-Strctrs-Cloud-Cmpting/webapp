@@ -74,6 +74,9 @@ source "googlecompute" "custom_image" {
   source_image_project_id = ["ubuntu-os-cloud"]
   image_name              = "custom-image-${local.timestamp}"
 
+  # Explicitly set the custom service account
+  service_account_email = "servicedev@csye6225-dev-452203.iam.gserviceaccount.com"
+
   ssh_username = "ubuntu"
   ssh_timeout  = "5m"
 }
