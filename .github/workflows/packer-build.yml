@@ -77,23 +77,26 @@ jobs:
           AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
           echo "AMI ID created: $AMI_ID"
 
-      # Build GCP Packer Image in DEV Project
       - name: Build GCP Packer Image
-        run: packer build -var 'gcp_project_id=${{ secrets.GCP_DEV_PROJECT_ID }}' -var 'gcp_zone=${{ secrets.GCP_DEV_ZONE }}' packer/machine-image.pkr.hcl
-
-      # Extract GCP Image Name for Sharing
+        run: |
+            packer build -var 'gcp_project_id=${{ secrets.GCP_DEV_PROJECT_ID }}' \
+                         -var 'gcp_zone=${{ secrets.GCP_DEV_ZONE }}' \
+                         -var 'gcp_service_account_email=${{ secrets.GCP_DEV_SERVICE_ACCOUNT }}' \
+                         packer/machine-image.pkr.hcl
+  
+        # Extract GCP Image Name for Sharing
       - name: Extract GCP Image Name
         id: extract_image
         run: |
-          IMAGE_NAME=$(gcloud compute images list --filter="name~'custom-image'" --sort-by=~creationTimestamp --limit=1 --format="value(name)")
-          echo "GCP_IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-          echo "✅ GCP Image Name: $IMAGE_NAME"
-
-      # Share GCP Image with DEMO Project
+            IMAGE_NAME=$(gcloud compute images list --filter="name~'custom-image'" --sort-by=~creationTimestamp --limit=1 --format="value(name)")
+            echo "GCP_IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
+            echo "✅ GCP Image Name: $IMAGE_NAME"
+  
+        # Share GCP Image with DEMO Project
       - name: Share GCP Image with DEMO Project
         run: |
-          gcloud compute images add-iam-policy-binding $GCP_IMAGE_NAME \
-            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
-            --role="roles/compute.imageUser" \
-            --project=${{ secrets.GCP_DEV_PROJECT_ID }}
-          echo "✅ GCP Image shared with DEMO project"
+            gcloud compute images add-iam-policy-binding ${{ env.GCP_IMAGE_NAME }} \
+              --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+              --role="roles/compute.imageUser" \
+              --project=${{ secrets.GCP_DEV_PROJECT_ID }}
+            echo "✅ GCP Image shared with DEMO project"
