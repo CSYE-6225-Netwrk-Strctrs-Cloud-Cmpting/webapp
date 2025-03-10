@@ -4,12 +4,10 @@ packer {
       version = ">= 1.0.0, < 2.0.0"
       source  = "github.com/hashicorp/amazon"
     }
-    googlecompute = {
-      version = ">= 1.0.0, < 2.0.0"
-      source  = "github.com/hashicorp/googlecompute"
-    }
+
   }
 }
+
 
 variable "aws_region" {
   description = "AWS region to deploy the instance"
@@ -31,17 +29,16 @@ variable "ami_users" {
   default     = ["575108914806"]
 }
 
-variable "gcp_project_id" {
-  description = "GCP Project ID"
-  type        = string
-  default     = "csye6225-dev-452203"
+variable "gcp_zone" {
+  type    = string
+  default = "us-central1-a"
 }
 
-variable "gcp_zone" {
-  description = "GCP Zone where the image will be created"
-  type        = string
-  default     = "us-central1-a"
+variable "gcp_image_name" {
+  type    = string
+  default = "my-custom-image"
 }
+
 
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
@@ -66,19 +63,16 @@ source "amazon-ebs" "custom_ami" {
   ssh_username = "ubuntu"
 }
 
-source "googlecompute" "custom_image" {
-  project_id              = var.gcp_project_id
-  zone                    = var.gcp_zone
-  machine_type            = "e2-medium"
-  source_image_family     = "ubuntu-2204-lts"
-  source_image_project_id = ["ubuntu-os-cloud"]
-  image_name              = "custom-image-${local.timestamp}"
-
-  # Explicitly set the custom service account
-  service_account_email = "servicedev@csye6225-dev-452203.iam.gserviceaccount.com"
-
-  ssh_username = "ubuntu"
-  ssh_timeout  = "5m"
+source "googlecompute" "ubuntu_nodejs" {
+  project_id          = 459095826681
+  source_image        = "ubuntu-2404-noble-amd64-v20250214"
+  source_image_family = "ubuntu-2404-lts-noble"
+  zone                = var.gcp_zone
+  image_name          = "${var.gcp_image_name}-${local.timestamp}"
+  ssh_username        = "ubuntu"
+  machine_type        = "e2-micro"
+  disk_size           = 10
+  disk_type           = "pd-standard"
 }
 
 
@@ -86,7 +80,8 @@ source "googlecompute" "custom_image" {
 build {
   sources = [
     "source.amazon-ebs.custom_ami",
-    "source.googlecompute.custom_image"
+    "source.googlecompute.ubuntu_nodejs"
+
   ]
 
   provisioner "file" {
