@@ -30,18 +30,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}  # ✅ This ensures AWS region is passed
 
-      # Configure GCP Credentials for DEV Project
-      - name: Authenticate to Google Cloud (DEV)
-        uses: google-github-actions/auth@v1
-        with:
-          credentials_json: ${{ secrets.GCP_DEV_KEY }}
-
-      # Set GCP Project and Zone for DEV
-      - name: Set GCP Project and Zone (DEV)
-        run: |
-          gcloud config set project ${{ secrets.GCP_DEV_PROJECT_ID }}
-          gcloud config set compute/zone ${{ secrets.GCP_DEV_ZONE }}
-
+      
           
       - name: Debug - Check if webapp.zip exists before proceeding
         run: |
@@ -62,6 +51,12 @@ jobs:
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
 
+      - name: Set up Google Cloud SDK  
+        uses: google-github-actions/auth@v2  
+        with:    
+            project_id: ${{ secrets.GCP_PROJECT_ID }}    c
+            redentials_json: ${{ secrets.GCP_SA_KEY }}
+
 
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
@@ -77,26 +72,9 @@ jobs:
           AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
           echo "AMI ID created: $AMI_ID"
 
-      - name: Build GCP Packer Image
+      - name: Share Image with Another GCP Project
         run: |
-            packer build -var 'gcp_project_id=${{ secrets.GCP_DEV_PROJECT_ID }}' \
-                         -var 'gcp_zone=${{ secrets.GCP_DEV_ZONE }}' \
-                         -var 'gcp_service_account_email=${{ secrets.GCP_DEV_SERVICE_ACCOUNT }}' \
-                         packer/machine-image.pkr.hcl
-  
-        # Extract GCP Image Name for Sharing
-      - name: Extract GCP Image Name
-        id: extract_image
-        run: |
-            IMAGE_NAME=$(gcloud compute images list --filter="name~'custom-image'" --sort-by=~creationTimestamp --limit=1 --format="value(name)")
-            echo "GCP_IMAGE_NAME=$IMAGE_NAME" >> $GITHUB_ENV
-            echo "✅ GCP Image Name: $IMAGE_NAME"
-  
-        # Share GCP Image with DEMO Project
-      - name: Share GCP Image with DEMO Project
-        run: |
-            gcloud compute images add-iam-policy-binding ${{ env.GCP_IMAGE_NAME }} \
-              --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
-              --role="roles/compute.imageUser" \
-              --project=${{ secrets.GCP_DEV_PROJECT_ID }}
-            echo "✅ GCP Image shared with DEMO project"
+          IMAGE_NAME=$(gcloud compute images list --filter="name~'packer-gcp-ubuntu-nodejs-*'" --format="value(name)" | head -n1)
+          gcloud compute images add-iam-policy-binding $IMAGE_NAME \
+            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+            --role="roles/compute.imageUser"
