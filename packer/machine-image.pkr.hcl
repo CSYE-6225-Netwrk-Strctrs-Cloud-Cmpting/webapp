@@ -31,9 +31,22 @@ variable "ami_users" {
   default     = ["575108914806"]
 }
 
+variable "gcp_project_id" {
+  description = "GCP Project ID"
+  type        = string
+  default     = "csye6225-dev-452203"
+}
+
+variable "gcp_zone" {
+  description = "GCP Zone where the image will be created"
+  type        = string
+  default     = "us-central1-a"
+}
+
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
+
 
 source "amazon-ebs" "custom_ami" {
   region        = var.aws_region
@@ -53,22 +66,24 @@ source "amazon-ebs" "custom_ami" {
   ssh_username = "ubuntu"
 }
 
-source "googlecompute" "ubuntu_nodejs" {
-  project_id   = "302221195769"
-  source_image = "ubuntu-2004-focal-v20250213" # Specific version (remove source_image_family)
-  zone         = "us-central1-a"
-  image_name   = "custom-ubuntu-nodejs-image"
+source "googlecompute" "custom_image" {
+  project_id              = var.gcp_project_id
+  zone                    = var.gcp_zone
+  machine_type            = "e2-medium"
+  source_image_family     = "ubuntu-2404-lts"
+  source_image_project_id = ["ubuntu-os-cloud"]
+  image_name              = "custom-image-${local.timestamp}"
+
   ssh_username = "ubuntu"
-  machine_type = "e2-micro"
-  disk_size    = 10
-  disk_type    = "pd-standard"
+  ssh_timeout  = "5m"
 }
+
 
 
 build {
   sources = [
     "source.amazon-ebs.custom_ami",
-    "source.googlecompute.ubuntu_nodejs"
+    "source.googlecompute.custom_image"
   ]
 
   provisioner "file" {
