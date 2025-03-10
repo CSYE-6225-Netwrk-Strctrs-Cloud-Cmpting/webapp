@@ -76,10 +76,6 @@ source "googlecompute" "custom_image" {
 
   ssh_username = "ubuntu"
   ssh_timeout  = "5m"
-
-  metadata = {
-    ssh-keys = "ubuntu:${file("~/.ssh/id_rsa.pub")}"
-  }
 }
 
 
