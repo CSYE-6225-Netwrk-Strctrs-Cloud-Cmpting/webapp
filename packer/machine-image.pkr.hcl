@@ -70,7 +70,7 @@ source "googlecompute" "custom_image" {
   project_id              = var.gcp_project_id
   zone                    = var.gcp_zone
   machine_type            = "e2-medium"
-  source_image_family     = "ubuntu-2404-lts"
+  source_image_family     = "ubuntu-2204-lts"
   source_image_project_id = ["ubuntu-os-cloud"]
   image_name              = "custom-image-${local.timestamp}"
 
