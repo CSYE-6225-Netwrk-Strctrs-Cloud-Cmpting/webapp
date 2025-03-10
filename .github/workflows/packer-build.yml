@@ -70,11 +70,21 @@ jobs:
       - name: Extract AMI ID (AWS)
         run: |
           AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
-          echo "AMI ID created: $AMI_ID"
+          if [ -z "$AMI_ID" ]; then
+            echo "❌ ERROR: AMI ID not found in output.log."
+            exit 1
+          fi
+          echo "✅ AMI ID created: $AMI_ID"
 
       - name: Share Image with Another GCP Project
         run: |
-          IMAGE_NAME=$(gcloud compute images list --filter="name~'packer-gcp-ubuntu-nodejs-*'" --format="value(name)" | head -n1)
+          IMAGE_NAME=$(gcloud compute images list --filter="name~'my-custom-image-*'" --format="value(name)" | head -n1)
+          if [ -z "$IMAGE_NAME" ]; then
+            echo "❌ ERROR: No matching GCP image found."
+            exit 1
+          fi
+          echo "✅ Found Image Name: $IMAGE_NAME"
+          
           gcloud compute images add-iam-policy-binding $IMAGE_NAME \
             --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
             --role="roles/compute.imageUser"
