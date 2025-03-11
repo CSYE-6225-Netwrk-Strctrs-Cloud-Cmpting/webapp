@@ -65,26 +65,41 @@ jobs:
         run: packer validate packer/machine-image.pkr.hcl
 
       - name: Build Packer Image
-        run: packer build packer/machine-image.pkr.hcl
+        run: |
+          packer build packer/machine-image.pkr.hcl | tee output.log
       
+      # Step 12: Extract the AWS AMI ID from the build log
       - name: Extract AMI ID (AWS)
         run: |
-          AMI_ID=$(grep -oP 'ami-\w{17}' output.log | tail -1)
+          # Flexible regex to capture any valid AMI ID
+          AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
+          
+          # Check if AMI ID is empty and exit with error if it is
           if [ -z "$AMI_ID" ]; then
             echo "❌ ERROR: AMI ID not found in output.log."
+            echo "🔍 Full output log for debugging:"
+            cat output.log
             exit 1
           fi
+
+          # If found, print the AMI ID
           echo "✅ AMI ID created: $AMI_ID"
 
+      # Step 13: Share the GCP image with another GCP project
       - name: Share Image with Another GCP Project
         run: |
+          # Extract the latest custom image name from GCP
           IMAGE_NAME=$(gcloud compute images list --filter="name~'my-custom-image-*'" --format="value(name)" | head -n1)
+
+          # Check if the image name is found
           if [ -z "$IMAGE_NAME" ]; then
             echo "❌ ERROR: No matching GCP image found."
             exit 1
           fi
+
           echo "✅ Found Image Name: $IMAGE_NAME"
           
-          gcloud compute images add-iam-policy-binding $IMAGE_NAME \
+          # Add IAM policy to share the image with another project
+          gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
             --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
             --role="roles/compute.imageUser"
