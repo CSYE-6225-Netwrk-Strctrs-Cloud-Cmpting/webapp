@@ -65,7 +65,8 @@ jobs:
         run: packer validate packer/machine-image.pkr.hcl
 
       - name: Build Packer Image
-        run: packer build packer/machine-image.pkr.hcl
+        run: |
+          packer build packer/machine-image.pkr.hcl | tee output.log
       
       # Step 12: Extract the AWS AMI ID from the build log
       - name: Extract AMI ID (AWS)
