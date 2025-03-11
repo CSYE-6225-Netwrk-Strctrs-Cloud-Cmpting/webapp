@@ -99,7 +99,14 @@ jobs:
 
           echo "✅ Found Image Name: $IMAGE_NAME"
           
-          # Add IAM policy to share the image with another project
+          # # Add IAM policy to share the image with another project
+          # gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
+          #   --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+          #   --role="roles/compute.imageUser"
+
+          TARGET_SA="${{ secrets.DEMO_SERVICE_ACCOUNT }}"
+
+          # Add IAM policy binding
           gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
-            --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
+            --member="serviceAccount:$TARGET_SA" \
             --role="roles/compute.imageUser"
