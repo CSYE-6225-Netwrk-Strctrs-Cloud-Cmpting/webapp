@@ -25,7 +25,7 @@ variable "aws_profile" {
 
 variable "instance_type" {
   description = "AWS EC2 instance type"
-  default     = "t3.micro"
+          default     = "t3.micro"
 }
 
 variable "ami_users" {
@@ -41,7 +41,7 @@ variable "gcp_zone" {
 variable "gcp_image_name" {
   type    = string
   default = "my-custom-image"
-}
+          }
 
 
 locals {
@@ -75,7 +75,7 @@ source "googlecompute" "ubuntu_nodejs" {
   image_name          = "${var.gcp_image_name}-${local.timestamp}"
   ssh_username        = "ubuntu"
   machine_type        = "e2-micro"
-  disk_size           = 10
+       disk_size           = 10
   disk_type           = "pd-standard"
 }
 
