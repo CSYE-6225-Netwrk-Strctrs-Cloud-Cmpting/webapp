@@ -25,7 +25,7 @@ variable "aws_profile" {
 
 variable "instance_type" {
   description = "AWS EC2 instance type"
-          default     = "t3.micro"
+  default     = "t3.micro"
 }
 
 variable "ami_users" {
