@@ -38,10 +38,10 @@ variable "gcp_zone" {
   default = "us-central1-a"
 }
 
-variable "gcp_image_name" {
+# variable "gcp_image_name" {
   type    = string
   default = "my-custom-image"
-          }
+}
 
 
 locals {
@@ -75,7 +75,7 @@ source "googlecompute" "ubuntu_nodejs" {
   image_name          = "${var.gcp_image_name}-${local.timestamp}"
   ssh_username        = "ubuntu"
   machine_type        = "e2-micro"
-       disk_size           = 10
+  disk_size           = 10
   disk_type           = "pd-standard"
 }
 
