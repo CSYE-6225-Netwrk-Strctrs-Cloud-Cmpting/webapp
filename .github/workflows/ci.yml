@@ -26,4 +26,4 @@ jobs:
  
       # Step 4: Run tests
       - name: Run tests
-        run: yarn test  # Replace this with npm test if using npm
+        run: yarn add @aws-sdk/client-s3  # Replace this with npm test if using npm
