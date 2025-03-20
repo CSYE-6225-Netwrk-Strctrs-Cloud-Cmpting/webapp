@@ -8,10 +8,8 @@ packer {
       version = ">= 1.0.0"
       source  = "github.com/hashicorp/googlecompute"
     }
-
   }
 }
-
 
 variable "aws_region" {
   description = "AWS region to deploy the instance"
@@ -43,11 +41,9 @@ variable "gcp_image_name" {
   default = "my-custom-image"
 }
 
-
 locals {
   timestamp = regex_replace(timestamp(), "[- TZ:]", "")
 }
-
 
 source "amazon-ebs" "custom_ami" {
   region        = var.aws_region
@@ -79,13 +75,10 @@ source "googlecompute" "ubuntu_nodejs" {
   disk_type           = "pd-standard"
 }
 
-
-
 build {
   sources = [
     "source.amazon-ebs.custom_ami",
     "source.googlecompute.ubuntu_nodejs"
-
   ]
 
   provisioner "file" {
@@ -119,6 +112,9 @@ build {
       "if [ -f /tmp/webapp.zip ]; then sudo unzip /tmp/webapp.zip -d /opt/webapp; else echo 'WARNING: /tmp/webapp.zip does not exist, skipping unzip.'; fi",
       "sudo chown -R csye6225:csye6225 /opt/webapp",
 
+      # Install Node.js dependencies
+      "cd /opt/webapp && sudo npm install",
+
       # Create systemd service for the webapp
       "echo '[Unit]\nDescription=WebApp Service\nAfter=network.target\n[Service]\nUser=csye6225\nGroup=csye6225\nExecStart=/usr/bin/node /opt/webapp/app.js\nRestart=always\n[Install]\nWantedBy=multi-user.target' | sudo tee /etc/systemd/system/webapp.service",
       "sudo systemctl daemon-reload",
@@ -126,4 +122,3 @@ build {
     ]
   }
 }
-      
