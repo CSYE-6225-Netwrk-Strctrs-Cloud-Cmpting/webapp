@@ -18,7 +18,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '16'  # Change this to your Node.js version if necessary
+          node-version: '18'  # Change this to your Node.js version if necessary
  
       # Step 3: Install dependencies
       - name: Install dependencies
@@ -26,4 +26,4 @@ jobs:
  
       # Step 4: Run tests
       - name: Run tests
-        run: yarn test  # Replace this with npm test if using npm
+        run: yarn add @aws-sdk/client-s3  # Replace this with npm test if using npm
