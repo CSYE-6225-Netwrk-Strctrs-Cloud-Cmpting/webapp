@@ -1,5 +1,5 @@
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const { File } = require('../models');  // Ensure models are correctly imported
+const { File } = require('../models');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
 
@@ -7,76 +7,91 @@ dotenv.config();
 
 const s3 = new S3Client({ region: 'us-east-1' });
 
-// ✅ Upload File (Make sure this function exists)
+// Upload File (POST /v1/file)
 const uploadFile = async (req, res) => {
     if (!req.file) {
-        return res.status(400).json({ error: 'No file uploaded' });
+        return res.status(400).send();
     }
 
-    const params = {
-        Bucket: process.env.AWS_BUCKET_NAME,
-        Key: req.file.originalname,
-        Body: req.file.buffer,
-        ContentType: req.file.mimetype
-    };
-
     try {
+        const fileId = uuidv4();
+        const fileName = req.file.originalname;
+        const s3Key = `${fileId}/${fileName}`;
+        
+        const params = {
+            Bucket: process.env.AWS_BUCKET_NAME,
+            Key: s3Key,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype
+        };
+
         await s3.send(new PutObjectCommand(params));
 
+        // Store file metadata in database
         const file = await File.create({
-            id: uuidv4(),
-            filename: req.file.originalname,
-            s3_path: `s3://${process.env.AWS_BUCKET_NAME}/${req.file.originalname}`,
-            size: req.file.size
+            id: fileId,
+            filename: fileName,
+            s3_path: `${process.env.AWS_BUCKET_NAME}/${s3Key}`,
+            size: req.file.size,
+            upload_date: new Date()
         });
 
-        res.status(201).json({ message: 'File uploaded successfully', file });
+        // Return response matching Swagger spec exactly
+        res.status(201).json({
+            file_name: fileName,
+            id: fileId,
+            url: `${process.env.AWS_BUCKET_NAME}/${s3Key}`,
+            upload_date: file.upload_date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Error uploading file:", error);
+        res.status(400).send();
     }
 };
 
-// ✅ List Files
-const listFiles = async (req, res) => {
+// Get File Metadata (GET /v1/file/{id})
+const getFileById = async (req, res) => {
     try {
-        const files = await File.findAll();
-        res.status(200).json(files);
+        const file = await File.findByPk(req.params.id);
+        if (!file) return res.status(404).send();
+
+        // Return response matching Swagger spec exactly
+        res.status(200).json({
+            file_name: file.filename,
+            id: file.id,
+            url: file.s3_path,
+            upload_date: file.upload_date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+        });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Error retrieving file:", error);
+        res.status(404).send();
     }
 };
 
-// ✅ Get File Metadata
-const getFileMetadata = async (req, res) => {
-    try {
-        const file = await File.findByPk(req.params.file_id);
-        if (!file) return res.status(404).json({ error: 'File not found' });
-
-        res.status(200).json(file);
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-};
-
-// ✅ Delete File
+// Delete File (DELETE /v1/file/{id})
 const deleteFile = async (req, res) => {
     try {
-        const file = await File.findByPk(req.params.file_id);
-        if (!file) return res.status(404).json({ error: 'File not found' });
+        const file = await File.findByPk(req.params.id);
+        if (!file) return res.status(404).send();
 
-        const fileName = file.s3_path.split('/').pop();
+        // Extract the key from s3_path
+        const s3Key = file.s3_path.substring(file.s3_path.indexOf('/') + 1);
 
+        // Delete from S3
         await s3.send(new DeleteObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
-            Key: fileName
+            Key: s3Key
         }));
 
+        // Delete from database
         await file.destroy();
-        res.status(200).json({ message: 'File deleted successfully' });
+        
+        // Return 204 No Content as per Swagger
+        res.status(204).send();
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Error deleting file:", error);
+        res.status(404).send();
     }
 };
 
-// ✅ Ensure all functions are exported
-module.exports = { uploadFile, listFiles, getFileMetadata, deleteFile };
+module.exports = { uploadFile, getFileById, deleteFile };

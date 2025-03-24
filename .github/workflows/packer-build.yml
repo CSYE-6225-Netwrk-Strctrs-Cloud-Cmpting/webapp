@@ -28,10 +28,8 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}  # ✅ This ensures AWS region is passed
+          aws-region: ${{ secrets.AWS_REGION }}
 
-      
-          
       - name: Debug - Check if webapp.zip exists before proceeding
         run: |
           if [ ! -f "packer/webapp.zip" ]; then 
@@ -47,17 +45,6 @@ jobs:
           echo "✅ webapp.zip copied to /tmp/"
           ls -lah /tmp/webapp.zip  # Verify file exists
       
-      - name: Build Packer Configuration
-        run: |
-          packer build packer/machine-image.pkr.hcl | tee output.log
-
-      - name: Set up Google Cloud SDK  
-        uses: google-github-actions/auth@v2  
-        with:    
-            project_id: ${{ secrets.GCP_PROJECT_ID }}    
-            credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
@@ -68,7 +55,7 @@ jobs:
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
       
-      # Step 12: Extract the AWS AMI ID from the build log
+      # Extract the AWS AMI ID from the build log
       - name: Extract AMI ID (AWS)
         run: |
           # Flexible regex to capture any valid AMI ID
@@ -84,29 +71,4 @@ jobs:
 
           # If found, print the AMI ID
           echo "✅ AMI ID created: $AMI_ID"
-
-      # Step 13: Share the GCP image with another GCP project
-      - name: Share Image with Another GCP Project
-        run: |
-          # Extract the latest custom image name from GCP
-          IMAGE_NAME=$(gcloud compute images list --filter="name~'my-custom-image-*'" --format="value(name)" | head -n1)
-
-          # Check if the image name is found
-          if [ -z "$IMAGE_NAME" ]; then
-            echo "❌ ERROR: No matching GCP image found."
-            exit 1
-          fi
-
-          echo "✅ Found Image Name: $IMAGE_NAME"
           
-          # # Add IAM policy to share the image with another project
-          # gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
-          #   --member="project:${{ secrets.GCP_DEMO_PROJECT_ID }}" \
-          #   --role="roles/compute.imageUser"
-
-          TARGET_SA="${{ secrets.DEMO_SERVICE_ACCOUNT }}"
-
-          # Add IAM policy binding
-          gcloud compute images add-iam-policy-binding "$IMAGE_NAME" \
-            --member="serviceAccount:$TARGET_SA" \
-            --role="roles/compute.imageUser"

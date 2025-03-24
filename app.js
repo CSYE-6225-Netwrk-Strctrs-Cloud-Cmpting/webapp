@@ -11,9 +11,9 @@ app.use(express.json());
 // Connect to the database
 connectDB();
 
-// Register API Routes
-app.use("/health", healthCheckRoutes);
-app.use("/api/files", fileRoutes);
+// Register API Routes with correct paths matching Swagger
+app.use("/", healthCheckRoutes);
+app.use("/v1/file", fileRoutes); // Changed from "/api/files" to "/v1/file" per Swagger
 
 // Error Handling for Invalid JSON
 app.use((err, req, res, next) => {
