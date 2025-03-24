@@ -89,21 +89,11 @@ build {
   provisioner "shell" {
     inline = [
       "sudo apt update",
-      "sudo apt install -y postgresql postgresql-contrib unzip nodejs npm",
+      "sudo apt install -y unzip nodejs npm",
 
-      # Ensure PostgreSQL service is running
-      "sudo systemctl start postgresql",
-      "sudo systemctl enable postgresql",
+      # No longer installing PostgreSQL locally as required by assignment
 
-      # Fix PostgreSQL Authentication (Change peer to md5)
-      "PG_CONF=$(ls /etc/postgresql/*/main/pg_hba.conf) && sudo sed -i 's/local   all             all                                     peer/local   all             all                                     md5/' $PG_CONF",
-      "sudo systemctl restart postgresql",
-
-      # Set PostgreSQL password and create database
-      "sudo -u postgres psql -c \"ALTER USER postgres WITH PASSWORD 'password123';\"",
-      "sudo -u postgres psql -c \"CREATE DATABASE csye6225;\"",
-
-      # Ensure group and user exist
+      # Create a dedicated non-privileged user for the application
       "sudo groupadd -f csye6225",
       "sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225 || echo 'User csye6225 already exists'",
 
@@ -111,6 +101,7 @@ build {
       "sudo mkdir -p /opt/webapp",
       "if [ -f /tmp/webapp.zip ]; then sudo unzip /tmp/webapp.zip -d /opt/webapp; else echo 'WARNING: /tmp/webapp.zip does not exist, skipping unzip.'; fi",
       "sudo chown -R csye6225:csye6225 /opt/webapp",
+      "sudo chmod 750 /opt/webapp",
 
       # Install Node.js dependencies
       "cd /opt/webapp && sudo npm install",
