@@ -15,7 +15,8 @@ jest.mock("../models", () => {
   
     return {
       sequelize: mockSequelize, 
-      HealthCheck: mockHealthCheck, 
+      HealthCheck: mockHealthCheck,
+      connectDB: jest.fn().mockResolvedValue(), 
     };
   });
   
