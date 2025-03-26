@@ -115,7 +115,7 @@ build {
       "sudo chmod 750 /opt/webapp/logs",
 
       # Install dependencies
-      
+
       "cd /opt/webapp",
       "echo '📦 Installing dependencies...' ",
       "sudo npm install helmet cors winston --save",
