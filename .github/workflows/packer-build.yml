@@ -10,56 +10,61 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: 🧪 Install project dependencies
+      - name: Install Node.js dependencies for webapp
+        working-directory: webapp
         run: npm install
 
-      - name: ✅ Run tests
-        run: npm test
+      - name: Run Integration Tests
+        working-directory: webapp
+        run: npm run test
 
-      - name: 🧰 Install Packer
+      - name: Zip the webapp folder
+        run: |
+          mkdir -p packer
+          zip -r packer/webapp.zip webapp -x "webapp/node_modules/*" "webapp/.git/*"
+          echo "✅ webapp.zip created"
+
+      - name: Verify zip exists
+        run: |
+          if [ ! -f "packer/webapp.zip" ]; then 
+            echo "❌ ERROR: webapp.zip not found!";
+            exit 1;
+          fi
+
+      - name: Install Packer
         uses: hashicorp/setup-packer@v2
         with:
           version: latest
 
-      - name: 🔐 Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: 📦 Zip webapp
-        run: |
-          mkdir -p packer
-          zip -r packer/webapp.zip . -x "node_modules/*" ".git/*" ".github/*" "logs/*"
-
-      - name:  Debug: Confirm ZIP created
-        run: |
-          if [ ! -f "packer/webapp.zip" ]; then 
-            echo "❌ ERROR: webapp.zip missing!"
-            exit 1
-          else
-            echo "✅ webapp.zip exists!"
-          fi
-
-      - name: 🔁 Packer init
+      - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
-      - name: 🔍 Packer validate
+      - name: Format Check
+        run: packer fmt -check packer/machine-image.pkr.hcl
+
+      - name: Validate Packer Configuration
         run: packer validate packer/machine-image.pkr.hcl
 
-      - name: 🏗️ Build Packer Image
+      - name: Build Packer Image
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
 
-      - name: 🆔 Extract AMI ID from output
+      - name: Extract AMI ID (AWS)
         run: |
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
           if [ -z "$AMI_ID" ]; then
-            echo " ERROR: No AMI ID found!"
+            echo "❌ ERROR: AMI ID not found."
+            cat output.log
             exit 1
           fi
-          echo "✅ AMI ID: $AMI_ID"
+          echo "✅ AMI ID created: $AMI_ID"
