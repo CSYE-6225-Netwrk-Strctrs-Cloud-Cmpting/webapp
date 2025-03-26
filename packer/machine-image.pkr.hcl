@@ -95,13 +95,13 @@ build {
     inline = [
       "sudo apt update",
       "sudo apt install -y unzip nodejs npm curl",
-      "curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb",
-      "sudo dpkg -i amazon-cloudwatch-agent.deb",
 
-      # Create csye6225 user
+      # Ensure csye6225 user exists
       "sudo groupadd -f csye6225",
       "sudo id -u csye6225 &>/dev/null || sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225",
 
+      "curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb",
+      "sudo dpkg -i amazon-cloudwatch-agent.deb",
 
       # Unzip webapp
       "sudo mkdir -p /opt/webapp",
