@@ -8,25 +8,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Install Dependencies
         run: npm install
-        working-directory: ./webapp
 
       - name: Run Integration Tests
         run: npm run test
-        working-directory: ./webapp
-
-      - name: Zip WebApp Folder
-        run: zip -r webapp.zip .
-        working-directory: ./webapp
-
-      - name: Move webapp.zip to packer folder
-        run: mv ./webapp/webapp.zip ./packer/webapp.zip
 
       - name: Install Packer
         uses: hashicorp/setup-packer@v2
@@ -40,7 +30,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Check if webapp.zip exists
+      - name: Debug - Check if webapp.zip exists before proceeding
         run: |
           if [ ! -f "packer/webapp.zip" ]; then 
             echo "❌ ERROR: webapp.zip not found in packer/ directory!";
@@ -53,8 +43,8 @@ jobs:
         run: |
           cp packer/webapp.zip /tmp/webapp.zip
           echo "✅ webapp.zip copied to /tmp/"
-          ls -lah /tmp/webapp.zip
-
+          ls -lah /tmp/webapp.zip  # Verify file exists
+      
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
@@ -64,15 +54,20 @@ jobs:
       - name: Build Packer Image
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
-
+      
+      # Extract the AWS AMI ID from the build log
       - name: Extract AMI ID (AWS)
         run: |
+          # Flexible regex to capture any valid AMI ID
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
-
+          
+          # Check if AMI ID is empty and exit with error if it is
           if [ -z "$AMI_ID" ]; then
             echo "❌ ERROR: AMI ID not found in output.log."
+            echo "🔍 Full output log for debugging:"
             cat output.log
             exit 1
           fi
 
+          # If found, print the AMI ID
           echo "✅ AMI ID created: $AMI_ID"
