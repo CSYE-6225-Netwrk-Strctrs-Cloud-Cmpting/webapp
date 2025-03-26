@@ -1,26 +1,27 @@
-const {HealthCheck} = require('../models');
+const { HealthCheck } = require('../models');
+const logger = require('../logger');
+const StatsD = require('node-statsd');
+const statsdClient = new StatsD({ host: 'localhost', port: 8125 });
 
 const healthCheckController = async (req, res) => {
   try {
-    // Check if request has any payload in the body
     if (req.body && Object.keys(req.body).length > 0) {
-      return res.status(400).send(); // Send 400 Bad Request if request contains any body payload
+      logger.warn('Health check received body payload');
+      return res.status(400).send();
     }
 
-    // Check if request has any query parameters
     if (Object.keys(req.query).length > 0) {
-      return res.status(400).send(); // Send 400 Bad Request if query parameters exist
+      logger.warn('Health check received query params');
+      return res.status(400).send();
     }
 
-    // Insert a new health check record
     await HealthCheck.create({ datetime: new Date() });
+    statsdClient.increment('api.healthz.count');
+    logger.info('Health check successful');
 
-    // Return 200 OK if record is inserted successfully
     res.status(200).send();
   } catch (error) {
-    console.error(error);
-
-    // Return 503 Service Unavailable if insert command fails
+    logger.error(`Health check failed: ${error.stack}`);
     res.status(503).send();
   }
 };

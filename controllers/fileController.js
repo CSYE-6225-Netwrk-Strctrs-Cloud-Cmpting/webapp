@@ -2,22 +2,27 @@ const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/cl
 const { File } = require('../models');
 const dotenv = require('dotenv');
 const { v4: uuidv4 } = require('uuid');
+const logger = require('../logger');
+const StatsD = require('node-statsd');
+const statsdClient = new StatsD({ host: 'localhost', port: 8125 });
 
 dotenv.config();
 
 const s3 = new S3Client({ region: 'us-east-1' });
 
-// Upload File (POST /v1/file)
 const uploadFile = async (req, res) => {
     if (!req.file) {
+        logger.warn('Upload attempted without a file');
         return res.status(400).send();
     }
+
+    const start = Date.now();
 
     try {
         const fileId = uuidv4();
         const fileName = req.file.originalname;
         const s3Key = `${fileId}/${fileName}`;
-        
+
         const params = {
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: s3Key,
@@ -26,8 +31,8 @@ const uploadFile = async (req, res) => {
         };
 
         await s3.send(new PutObjectCommand(params));
+        statsdClient.timing('s3.upload.time', Date.now() - start);
 
-        // Store file metadata in database
         const file = await File.create({
             id: fileId,
             filename: fileName,
@@ -36,60 +41,61 @@ const uploadFile = async (req, res) => {
             upload_date: new Date()
         });
 
-        // Return response matching Swagger spec exactly
+        logger.info(`File uploaded: ${fileName} (${fileId})`);
+        statsdClient.increment('api.upload.count');
+
         res.status(201).json({
             file_name: fileName,
             id: fileId,
             url: `${process.env.AWS_BUCKET_NAME}/${s3Key}`,
-            upload_date: file.upload_date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+            upload_date: file.upload_date.toISOString().split('T')[0]
         });
     } catch (error) {
-        console.error("Error uploading file:", error);
+        logger.error(`Upload failed: ${error.stack}`);
         res.status(400).send();
     }
 };
 
-// Get File Metadata (GET /v1/file/{id})
 const getFileById = async (req, res) => {
     try {
         const file = await File.findByPk(req.params.id);
         if (!file) return res.status(404).send();
 
-        // Return response matching Swagger spec exactly
+        logger.info(`File metadata fetched: ${file.id}`);
+        statsdClient.increment('api.getfile.count');
+
         res.status(200).json({
             file_name: file.filename,
             id: file.id,
             url: file.s3_path,
-            upload_date: file.upload_date.toISOString().split('T')[0] // Format as YYYY-MM-DD
+            upload_date: file.upload_date.toISOString().split('T')[0]
         });
     } catch (error) {
-        console.error("Error retrieving file:", error);
+        logger.error(`Get file failed: ${error.stack}`);
         res.status(404).send();
     }
 };
 
-// Delete File (DELETE /v1/file/{id})
 const deleteFile = async (req, res) => {
     try {
         const file = await File.findByPk(req.params.id);
         if (!file) return res.status(404).send();
 
-        // Extract the key from s3_path
         const s3Key = file.s3_path.substring(file.s3_path.indexOf('/') + 1);
 
-        // Delete from S3
         await s3.send(new DeleteObjectCommand({
             Bucket: process.env.AWS_BUCKET_NAME,
             Key: s3Key
         }));
 
-        // Delete from database
         await file.destroy();
-        
-        // Return 204 No Content as per Swagger
+
+        logger.info(`File deleted: ${file.id}`);
+        statsdClient.increment('api.deletefile.count');
+
         res.status(204).send();
     } catch (error) {
-        console.error("Error deleting file:", error);
+        logger.error(`Delete file failed: ${error.stack}`);
         res.status(404).send();
     }
 };

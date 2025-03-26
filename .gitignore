@@ -109,6 +109,15 @@ dist
 # Docusaurus cache and generated files
 .docusaurus
 
+logs/*
+!logs/.keep
+
+# Ignore IDE settings
+.idea/
+
+# Ignore macOS system files
+.DS_Store
+
 # Serverless directories
 .serverless/
 
