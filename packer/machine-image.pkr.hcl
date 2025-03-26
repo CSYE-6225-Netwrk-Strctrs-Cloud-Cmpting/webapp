@@ -67,7 +67,7 @@ build {
 
       # Create csye6225 user and group if not exists
       "sudo getent group csye6225 || sudo groupadd csye6225",
-      "sudo getent passwd csye6225 || sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225",
+      "sudo getent passwd csye6225 || sudo useradd -m -g csye6225 -s /bin/bash csye6225",
 
       # Install CloudWatch Agent
       "curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb",
@@ -76,8 +76,11 @@ build {
       # Prepare /opt/webapp directory
       "sudo mkdir -p /opt/webapp",
       "if [ -f /tmp/webapp.zip ]; then sudo unzip /tmp/webapp.zip -d /opt/webapp; else echo 'webapp.zip missing'; fi",
+
+      # Fix execution permissions
+      "sudo chmod +x /opt/webapp/app.js",
       "sudo chown -R csye6225:csye6225 /opt/webapp",
-      "sudo chmod 750 /opt/webapp",
+      "sudo chmod -R 750 /opt/webapp",
 
       # Setup logs
       "sudo mkdir -p /opt/webapp/logs",
@@ -85,10 +88,15 @@ build {
       "sudo chown -R csye6225:csye6225 /opt/webapp/logs",
       "sudo chmod 750 /opt/webapp/logs",
 
+      # Create default .env file if needed
+      "sudo touch /opt/webapp/.env",
+      "sudo chown csye6225:csye6225 /opt/webapp/.env",
+      "sudo chmod 640 /opt/webapp/.env",
+
       # Install dependencies
       "cd /opt/webapp",
-      "sudo npm install helmet cors winston --save",
-      "sudo npm install --production || { echo 'npm install failed'; exit 1; }",
+      "sudo -u csye6225 npm install helmet cors winston --save",
+      "sudo -u csye6225 npm install --production || { echo 'npm install failed'; exit 1; }",
 
       # Create systemd service
       "echo '[Unit]' | sudo tee /etc/systemd/system/webapp.service",
@@ -97,10 +105,18 @@ build {
       "echo '[Service]' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo 'User=csye6225' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo 'Group=csye6225' | sudo tee -a /etc/systemd/system/webapp.service",
+      "echo 'WorkingDirectory=/opt/webapp' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo 'ExecStart=/usr/bin/node /opt/webapp/app.js' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo 'Restart=always' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo '[Install]' | sudo tee -a /etc/systemd/system/webapp.service",
       "echo 'WantedBy=multi-user.target' | sudo tee -a /etc/systemd/system/webapp.service",
+
+      # Test the app execution manually
+      "sudo -u csye6225 /usr/bin/node -e 'console.log(\"Node.js is working\")'",
+
+      # Verify app can be executed
+      "sudo test -f /opt/webapp/app.js || { echo 'app.js not found'; exit 1; }",
+      "sudo test -x /opt/webapp/app.js || { echo 'app.js not executable'; exit 1; }",
 
       "sudo systemctl daemon-reload",
       "sudo systemctl enable webapp.service",
