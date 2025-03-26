@@ -100,7 +100,8 @@ build {
 
       # Create csye6225 user
       "sudo groupadd -f csye6225",
-      "sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225 || echo 'User csye6225 already exists'",
+      "sudo id -u csye6225 &>/dev/null || sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225",
+
 
       # Unzip webapp
       "sudo mkdir -p /opt/webapp",
