@@ -3,28 +3,15 @@ const path = require('path');
 const fs = require('fs');
 
 const logDir = path.join(__dirname, 'logs');
+if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 
-// Create logs directory and log file if they don't exist
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-  fs.writeFileSync(path.join(logDir, 'csye6225.log'), ''); // create empty log file
-}
-
-const logFormat = winston.format.printf(({ level, message, timestamp, httpRequest }) => {
-  return JSON.stringify({
-    timestamp,
-    severity: level.toUpperCase(),
-    message,
-    httpRequest
-  });
+const logFormat = winston.format.printf(({ level, message, timestamp }) => {
+  return JSON.stringify({ timestamp, severity: level.toUpperCase(), message });
 });
 
 const logger = winston.createLogger({
   level: 'debug',
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    logFormat
-  ),
+  format: winston.format.combine(winston.format.timestamp(), logFormat),
   transports: [
     new winston.transports.File({ filename: path.join(logDir, 'csye6225.log') }),
     new winston.transports.Console()
@@ -39,5 +26,3 @@ process.on('unhandledRejection', (reason) => {
 });
 
 module.exports = logger;
-
-

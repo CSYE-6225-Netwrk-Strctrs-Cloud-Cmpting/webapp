@@ -8,9 +8,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
 
       - name: Install Dependencies
         run: npm install
@@ -30,33 +36,8 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Prepare webapp package
-        run: |
-          # Ensure packer directory exists
-          mkdir -p packer
-          
-          # Create a temporary directory for the webapp files
-          mkdir -p webapp_temp
-          
-          # Copy all necessary files (adjust as needed for your project structure)
-          cp -r *.js *.json node_modules package*.json webapp_temp/ || true
-          
-          # Make sure app.js is executable
-          chmod +x webapp_temp/app.js
-          
-          # Create an empty .env file or copy your template
-          touch webapp_temp/.env
-          
-          # Create the zip file
-          cd webapp_temp
-          zip -r ../packer/webapp.zip ./*
-          cd ..
-          
-          # Clean up
-          rm -rf webapp_temp
-          
-          # Verify the zip file exists
-          ls -lah packer/webapp.zip
+      - name: Create logs directory if not exists (for Winston)
+        run: mkdir -p logs && echo "Log initialized by CI" > logs/csye6225.log
 
       - name: Debug - Check if webapp.zip exists before proceeding
         run: |
@@ -65,9 +46,8 @@ jobs:
             exit 1;
           else
             echo "✅ webapp.zip exists, proceeding..."
-            unzip -l packer/webapp.zip
           fi
-      
+
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
 
@@ -77,20 +57,14 @@ jobs:
       - name: Build Packer Image
         run: |
           packer build packer/machine-image.pkr.hcl | tee output.log
-      
-      # Extract the AWS AMI ID from the build log
+
       - name: Extract AMI ID (AWS)
         run: |
-          # Flexible regex to capture any valid AMI ID
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
-          
-          # Check if AMI ID is empty and exit with error if it is
           if [ -z "$AMI_ID" ]; then
             echo "❌ ERROR: AMI ID not found in output.log."
-            echo "🔍 Full output log for debugging:"
             cat output.log
             exit 1
           fi
-
-          # If found, print the AMI ID
           echo "✅ AMI ID created: $AMI_ID"
+         
