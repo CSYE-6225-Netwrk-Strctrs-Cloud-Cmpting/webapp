@@ -1,88 +1,48 @@
 packer {
   required_plugins {
     amazon = {
-      version = ">= 1.0.0, < 2.0.0"
       source  = "github.com/hashicorp/amazon"
-    }
-    googlecompute = {
       version = ">= 1.0.0"
-      source  = "github.com/hashicorp/googlecompute"
     }
   }
 }
 
-variable "aws_region" {
-  description = "AWS region to deploy the instance"
-  default     = "us-east-1"
+variable "AWS_REGION" {
+  default = "us-east-1"
 }
 
-variable "aws_profile" {
-  description = "AWS CLI profile to use for authentication"
-  default     = "dev"
+variable "AWS_PROFILE" {
+  default = "dev"
 }
 
-variable "instance_type" {
-  description = "AWS EC2 instance type"
-  default     = "t3.micro"
+variable "inst_type" {
+  default = "t2.micro"
 }
 
-variable "ami_users" {
-  description = "AWS Account ID for sharing the AMI"
-  default     = ["575108914806"]
+variable "S3_BUCKET_NAME" {
+  default = "csye62252025"
 }
 
-variable "gcp_zone" {
-  type    = string
-  default = "us-central1-a"
-}
+source "amazon-ebs" "ubuntu" {
+  ami_name      = "ubuntu-24.04-{{timestamp}}"
+  profile       = var.AWS_PROFILE
+  region        = var.AWS_REGION
+  source_ami    = "ami-0fe67b8200454bad4"
+  instance_type = var.inst_type
+  ssh_username  = "ubuntu"
 
-variable "gcp_image_name" {
-  type    = string
-  default = "my-custom-image"
-}
-
-locals {
-  timestamp = regex_replace(timestamp(), "[- TZ:]", "")
-}
-
-source "amazon-ebs" "custom_ami" {
-  region        = var.aws_region
-  profile       = var.aws_profile
-  instance_type = var.instance_type
-  ami_name      = "custom-ami-{{timestamp}}"
-  ami_users     = var.ami_users
-  source_ami_filter {
-    filters = {
-      name                = "ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*"
-      root-device-type    = "ebs"
-      virtualization-type = "hvm"
-    }
-    owners      = ["099720109477"] # Canonical
-    most_recent = true
+  tags = {
+    Name  = "Ubuntu-webapp-AMI"
+    Owner = "YourName"
   }
-  ssh_username = "ubuntu"
 }
-
-# source "googlecompute" "ubuntu_nodejs" {
-#   project_id          = 459095826681
-#   source_image        = "ubuntu-2404-noble-amd64-v20250214"
-#   source_image_family = "ubuntu-2404-lts-noble"
-#   zone                = var.gcp_zone
-#   image_name          = "${var.gcp_image_name}-${local.timestamp}"
-#   ssh_username        = "ubuntu"
-#   machine_type        = "e2-micro"
-#   disk_size           = 10
-#   disk_type           = "pd-standard"
-# }
 
 build {
-  sources = [
-    "source.amazon-ebs.custom_ami"
-    # "source.googlecompute.ubuntu_nodejs"
-  ]
+  sources = ["source.amazon-ebs.ubuntu"]
 
+  # Upload app and CloudWatch config files
   provisioner "file" {
-    source      = "packer/webapp.zip"
+    source      = "webapp.zip"
     destination = "/tmp/webapp.zip"
   }
 
@@ -91,45 +51,92 @@ build {
     destination = "/tmp/cloudwatch-agent-config.json"
   }
 
+  # Install dependencies and setup application
   provisioner "shell" {
     inline = [
-      "sudo apt update",                                                                                         # Update apt repositories
-      "sudo apt install -y unzip nodejs npm curl",                                                               # Install necessary dependencies
-      "curl -O https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb", # Download CloudWatch Agent
-      "sudo dpkg -i amazon-cloudwatch-agent.deb",                                                                # Install the CloudWatch Agent package
+      "export DEBIAN_FRONTEND=noninteractive",
+      "sudo apt update -y",
 
-      # Create the 'csye6225' user and group
+      # Fix SSL issues
+      "sudo apt install -y software-properties-common",
+      "sudo add-apt-repository universe",
+      "sudo apt-get update --fix-missing",
+      "sudo apt-get remove -y --purge libssl-dev",
+      "sudo apt-get autoremove -y",
+      "sudo apt-get install -y --allow-downgrades --allow-change-held-packages libssl3t64=3.0.13-0ubuntu3.5",
+      "sudo apt-get install -y --allow-downgrades --allow-change-held-packages libssl-dev",
+
+      # Install Node.js and other packages
+      "sudo apt install -y nodejs npm unzip",
+
+      # Create user and group
       "sudo groupadd -f csye6225",
-      "sudo useradd -m -g csye6225 -s /usr/sbin/nologin csye6225 || echo 'User csye6225 already exists'",
+      "sudo useradd -r -s /usr/sbin/nologin -g csye6225 csye6225 || echo 'User already exists'",
 
-      # Unzip the web application
-      "sudo mkdir -p /opt/webapp",                                                                                                                           # Create the target directory
-      "if [ -f /tmp/webapp.zip ]; then sudo unzip /tmp/webapp.zip -d /opt/webapp; else echo 'WARNING: /tmp/webapp.zip does not exist, skipping unzip.'; fi", # Unzip the application if the ZIP exists
-      "sudo chown -R csye6225:csye6225 /opt/webapp",                                                                                                         # Change ownership of the app files
-      "sudo chmod 750 /opt/webapp",                                                                                                                          # Set correct permissions for the app files
+      # Setup application directory
+      "sudo mkdir -p /opt/csye6225/webapp",
+      "sudo unzip -q /tmp/webapp.zip -d /opt/csye6225/webapp",
 
-      # Create logs directory for the application
-      "sudo mkdir -p /opt/webapp/logs",
-      "sudo touch /opt/webapp/logs/csye6225.log",         # Create a log file
-      "sudo chown -R csye6225:csye6225 /opt/webapp/logs", # Set ownership of log files
-      "sudo chmod 750 /opt/webapp/logs",                  # Set permissions on log files
+      # Create .env file
+      "echo 'AWS_REGION=${var.AWS_REGION}' | sudo tee -a /opt/csye6225/webapp/.env",
+      "echo 'S3_BUCKET_NAME=${var.S3_BUCKET_NAME}' | sudo tee -a /opt/csye6225/webapp/.env",
 
-      # Install the application dependencies
-      "cd /opt/webapp && sudo npm install",
+      # Set permissions
+      "sudo chown csye6225:csye6225 /opt/csye6225/webapp/.env",
+      "sudo chmod 600 /opt/csye6225/webapp/.env",
 
-      # Set up systemd service to start the web application on boot
-      "echo '[Unit]\\nDescription=WebApp Service\\nAfter=network.target\\n[Service]\\nUser=csye6225\\nGroup=csye6225\\nExecStart=/usr/bin/node /opt/webapp/app.js\\nRestart=always\\n[Install]\\nWantedBy=multi-user.target' | sudo tee /etc/systemd/system/webapp.service",
-      "sudo systemctl daemon-reload",         # Reload systemd service configuration
-      "sudo systemctl enable webapp.service", # Enable webapp service to start on boot
+      # Install only production dependencies
+      "cd /opt/csye6225/webapp/ && sudo npm install --only=production --no-fund --no-audit",
 
-      # Configure CloudWatch agent
-      "sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc",                                                          # Create config directory
-      "sudo mv /tmp/cloudwatch-agent-config.json /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json", # Move the config file to the correct location
+      # Ownership and permissions
+      "sudo chown -R csye6225:csye6225 /opt/csye6225/webapp",
+      "sudo chmod -R 750 /opt/csye6225/webapp"
+    ]
+  }
 
-      # Start the CloudWatch agent with the config file
-      "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s", # Start CloudWatch agent
-      "sudo systemctl restart amazon-cloudwatch-agent.service",                                                                                                                    # Restart the CloudWatch agent service
-      "sudo systemctl status amazon-cloudwatch-agent.service || journalctl -u amazon-cloudwatch-agent.service --no-pager"                                                          # Check CloudWatch agent status
+  # Install and configure CloudWatch Agent
+  provisioner "shell" {
+    inline = [
+      "wget https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb",
+      "sudo dpkg -i amazon-cloudwatch-agent.deb",
+      "sudo systemctl enable amazon-cloudwatch-agent",
+      "sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/tmp/cloudwatch-agent-config.json -s"
+    ]
+  }
+
+  # Upload systemd service file for app
+  provisioner "file" {
+    content     = <<-EOF
+    [Unit]
+    Description=CSYE 6225 App
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=csye6225
+    Group=csye6225
+    EnvironmentFile=/opt/csye6225/webapp/.env
+    WorkingDirectory=/opt/csye6225/webapp
+    ExecStart=/usr/bin/node /opt/csye6225/webapp/app.js
+    Restart=always
+    StandardOutput=syslog
+    StandardError=syslog
+    SyslogIdentifier=csye6225
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    destination = "/tmp/csye6225.service"
+  }
+
+  # Enable and start app service
+  provisioner "shell" {
+    inline = [
+      "sudo mv /tmp/csye6225.service /etc/systemd/system/csye6225.service",
+      "sudo chmod 664 /etc/systemd/system/csye6225.service",
+      "sudo systemctl daemon-reload",
+      "sudo systemctl enable csye6225.service",
+      "sudo systemctl start csye6225.service"
     ]
   }
 }
