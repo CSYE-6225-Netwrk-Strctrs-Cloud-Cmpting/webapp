@@ -15,6 +15,12 @@ variable "AWS_PROFILE" {
   default = "dev"
 }
 
+variable "demo_account_ids" {
+  description = "List of AWS Account IDs to share AMI with"
+  type        = list(string)
+  default     = ["575108914806"]
+}
+
 variable "inst_type" {
   default = "t2.micro"
 }
@@ -30,6 +36,8 @@ source "amazon-ebs" "ubuntu" {
   source_ami    = "ami-0fe67b8200454bad4"
   instance_type = var.inst_type
   ssh_username  = "ubuntu"
+
+  ami_users = var.demo_account_ids
 
   tags = {
     Name  = "Ubuntu-webapp-AMI"
