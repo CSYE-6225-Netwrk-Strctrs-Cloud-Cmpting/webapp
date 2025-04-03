@@ -9,6 +9,11 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: us-east-1
+      AWS_PROFILE: dev
+      S3_BUCKET_NAME: csye62252025
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -34,19 +39,13 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create logs directory if not exists (for Winston)
-        run: mkdir -p logs && echo "Log initialized by CI" > logs/csye6225.log
-
-      - name: Debug - Check if webapp.zip exists before proceeding
+      - name: Ensure Required Files Exist
         run: |
-          if [ ! -f "packer/webapp.zip" ]; then 
-            echo "❌ ERROR: webapp.zip not found in packer/ directory!";
-            exit 1;
-          else
-            echo "✅ webapp.zip exists, proceeding..."
-          fi
+          [ -f "webapp.zip" ] || { echo "ERROR: webapp.zip not found."; exit 1; }
+          [ -f "packer/cloudwatch-agent-config.json" ] || { echo "ERROR: cloudwatch-agent-config.json not found."; exit 1; }
+          echo "All required files are present."
 
       - name: Initialize Packer
         run: packer init packer/machine-image.pkr.hcl
@@ -56,15 +55,18 @@ jobs:
 
       - name: Build Packer Image
         run: |
-          packer build packer/machine-image.pkr.hcl | tee output.log
+          packer build -var "AWS_REGION=${{ env.AWS_REGION }}" \
+                       -var "AWS_PROFILE=${{ env.AWS_PROFILE }}" \
+                       -var "S3_BUCKET_NAME=${{ env.S3_BUCKET_NAME }}" \
+                       packer/machine-image.pkr.hcl | tee output.log
 
       - name: Extract AMI ID (AWS)
+        id: extract_ami
         run: |
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
           if [ -z "$AMI_ID" ]; then
-            echo "❌ ERROR: AMI ID not found in output.log."
-            cat output.log
+            echo "ERROR: AMI ID not found."
             exit 1
           fi
-          echo "✅ AMI ID created: $AMI_ID"
-         
+          echo "AMI ID created: $AMI_ID"
+          echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
