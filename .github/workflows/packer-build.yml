@@ -1,17 +1,20 @@
-name: Packer Build
+name: Packer Build 
 
 on:
-  push:
+  pull_request:
+    types:
+      - closed
     branches:
       - main
 
 jobs:
-  build:
+  build_and_deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     env:
       AWS_REGION: us-east-1
-      AWS_PROFILE: dev
+      AWS_PROFILE: dev-account
       S3_BUCKET_NAME: csye62252025
 
     steps:
@@ -34,39 +37,83 @@ jobs:
         with:
           version: latest
 
-      - name: Configure AWS Credentials
+      - name: Configure AWS Credentials (DEV)
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Ensure Required Files Exist
+      - name: Validate and Build AMI with Packer
         run: |
-          [ -f "webapp.zip" ] || { echo "ERROR: webapp.zip not found."; exit 1; }
-          [ -f "packer/cloudwatch-agent-config.json" ] || { echo "ERROR: cloudwatch-agent-config.json not found."; exit 1; }
-          echo "All required files are present."
-
-      - name: Initialize Packer
-        run: packer init packer/machine-image.pkr.hcl
-
-      - name: Validate Packer Configuration
-        run: packer validate packer/machine-image.pkr.hcl
-
-      - name: Build Packer Image
-        run: |
+          packer init packer/machine-image.pkr.hcl
+          packer validate packer/machine-image.pkr.hcl
           packer build -var "AWS_REGION=${{ env.AWS_REGION }}" \
-                       -var "AWS_PROFILE=${{ env.AWS_PROFILE }}" \
+                       -var "AWS_PROFILE=dev" \
                        -var "S3_BUCKET_NAME=${{ env.S3_BUCKET_NAME }}" \
                        packer/machine-image.pkr.hcl | tee output.log
 
-      - name: Extract AMI ID (AWS)
+      - name: Extract AMI ID
         id: extract_ami
         run: |
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
-          if [ -z "$AMI_ID" ]; then
-            echo "ERROR: AMI ID not found."
-            exit 1
-          fi
-          echo "AMI ID created: $AMI_ID"
-          echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
+          echo "ami_id=$AMI_ID" >> $GITHUB_ENV
+          echo "Extracted AMI ID: $AMI_ID"
+
+      - name: Share AMI with DEMO account
+        run: |
+          aws ec2 modify-image-attribute \
+            --image-id ${{ env.ami_id }} \
+            --launch-permission "Add=[{UserId=${{ secrets.DEMO_ACCOUNT_ID }}}]"
+
+      - name: Configure AWS Credentials (DEMO)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.DEMO_AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.DEMO_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create New Launch Template Version (DEMO)
+        id: new_lt
+        run: |
+          VERSION=$(aws ec2 create-launch-template-version \
+            --launch-template-name ${{ secrets.LAUNCH_TEMPLATE_PREFIX }} \
+            --source-version 1 \
+            --launch-template-data "{\"ImageId\":\"${{ env.ami_id }}\"}" \
+            --query 'LaunchTemplateVersion.VersionNumber' --output text)
+          echo "lt_version=$VERSION" >> $GITHUB_ENV
+          echo "Created launch template version: $VERSION"
+
+      - name: Set Default Launch Template Version
+        run: |
+          aws ec2 modify-launch-template \
+            --launch-template-name ${{ secrets.LAUNCH_TEMPLATE_PREFIX }} \
+            --default-version ${{ env.lt_version }}
+
+      - name: Start Instance Refresh on ASG
+        id: refresh
+        run: |
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name ${{ secrets.ASG_NAME }} \
+            --query 'InstanceRefreshId' --output text)
+          echo "refresh_id=$REFRESH_ID" >> $GITHUB_ENV
+          echo "Started instance refresh with ID: $REFRESH_ID"
+
+      - name: Wait for Instance Refresh to Complete
+        run: |
+          while true; do
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name ${{ secrets.ASG_NAME }} \
+              --query 'InstanceRefreshes[0].Status' --output text)
+            echo "Current refresh status: $STATUS"
+
+            if [[ "$STATUS" == "Successful" ]]; then
+              echo "✅ Instance refresh completed successfully"
+              exit 0
+            elif [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" ]]; then
+              echo "❌ Instance refresh failed"
+              exit 1
+            fi
+
+            sleep 15
+          done
