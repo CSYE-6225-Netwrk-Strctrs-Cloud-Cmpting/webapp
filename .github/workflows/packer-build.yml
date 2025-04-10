@@ -2,10 +2,10 @@ name: Packer Build on PR Merge
 
 on:
   pull_request:
-    types:
-      - closed
     branches:
       - main
+    types:
+      - closed
 
 jobs:
   build_and_deploy:
@@ -150,4 +150,3 @@ jobs:
             fi
             sleep 30
           done
-
