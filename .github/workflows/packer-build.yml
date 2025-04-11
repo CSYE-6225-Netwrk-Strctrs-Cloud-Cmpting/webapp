@@ -16,8 +16,8 @@ jobs:
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_PROFILE: dev
-      DEV_PROFILE: dev
       DEMO_PROFILE: demo
+      S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
       DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
       LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
       ASG_NAME: ${{ secrets.ASG_NAME }}
@@ -25,21 +25,6 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v3
-
-      - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v2
-
-      - name: Terraform Init
-        run: terraform init
-
-      - name: Get S3 Bucket Name from Terraform
-        id: tf_output
-        run: |
-          BUCKET_NAME=$(terraform output -raw app_bucket_name)
-          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
-
-      - name: Set Env from Terraform Output
-        run: echo "S3_BUCKET_NAME=${{ steps.tf_output.outputs.bucket_name }}" >> $GITHUB_ENV
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
