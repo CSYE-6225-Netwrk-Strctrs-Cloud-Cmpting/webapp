@@ -15,8 +15,6 @@ jobs:
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_PROFILE: dev-account
-      DEMO_PROFILE: demo
       S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
       DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
       LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
@@ -62,7 +60,6 @@ jobs:
       - name: Build Packer Image
         run: |
           packer build -var "AWS_REGION=${{ env.AWS_REGION }}" \
-                       -var "AWS_PROFILE=${{ env.AWS_PROFILE }}" \
                        -var "S3_BUCKET_NAME=${{ env.S3_BUCKET_NAME }}" \
                        packer/machine-image.pkr.hcl | tee output.log
 
