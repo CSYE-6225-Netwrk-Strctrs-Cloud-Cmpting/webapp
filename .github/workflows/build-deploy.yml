@@ -1,67 +1,83 @@
-name: Build and Deploy
+name: Build and Deploy on PR Merge
 
 on:
   pull_request:
-    types: [closed]
     branches:
       - main
+    types:
+      - closed
 
 jobs:
-  build:
+  deploy:
     # Only run when the PR is merged (not when it's just closed without merging)
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     env:
-      AWS_REGION: us-east-1
+      AWS_REGION: ${{ secrets.AWS_REGION }}
+      AWS_PROFILE: dev
       DEV_PROFILE: dev
       DEMO_PROFILE: demo
-      S3_BUCKET_NAME: csye62252025
+      DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
+      LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
+      ASG_NAME: ${{ secrets.ASG_NAME }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Get S3 Bucket Name from Terraform
+        id: tf_output
+        run: |
+          BUCKET_NAME=$(terraform output -raw app_bucket_name)
+          echo "bucket_name=$BUCKET_NAME" >> $GITHUB_OUTPUT
+
+      - name: Set Env from Terraform Output
+        run: echo "S3_BUCKET_NAME=${{ steps.tf_output.outputs.bucket_name }}" >> $GITHUB_ENV
 
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: '18'
 
-      - name: Install Dependencies
+      - name: Install Node Dependencies
         run: npm install
 
-      - name: Run Integration Tests
-        run: npm run test
+      - name: Run Unit Tests
+        run: npm test
 
       - name: Install Packer
         uses: hashicorp/setup-packer@v2
         with:
           version: latest
 
-      # Configure AWS Credentials for DEV account
-      - name: Configure AWS DEV Credentials
+      - name: Configure AWS Credentials (DEV)
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Ensure Required Files Exist
+      - name: Check Required Files
         run: |
           [ -f "webapp.zip" ] || { echo "ERROR: webapp.zip not found."; exit 1; }
           [ -f "packer/cloudwatch-agent-config.json" ] || { echo "ERROR: cloudwatch-agent-config.json not found."; exit 1; }
-          echo "All required files are present."
 
-      - name: Initialize Packer
-        run: packer init packer/machine-image.pkr.hcl
-
-      - name: Validate Packer Configuration
-        run: packer validate packer/machine-image.pkr.hcl
+      - name: Initialize & Validate Packer
+        run: |
+          packer init packer/machine-image.pkr.hcl
+          packer validate packer/machine-image.pkr.hcl
 
       - name: Build Packer Image
         run: |
           packer build -var "AWS_REGION=${{ env.AWS_REGION }}" \
-                       -var "AWS_PROFILE=${{ env.DEV_PROFILE }}" \
+                       -var "AWS_PROFILE=${{ env.AWS_PROFILE }}" \
                        -var "S3_BUCKET_NAME=${{ env.S3_BUCKET_NAME }}" \
                        packer/machine-image.pkr.hcl | tee output.log
 
@@ -76,61 +92,65 @@ jobs:
           echo "AMI ID created: $AMI_ID"
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
 
-      # Switch to DEMO account credentials
-      - name: Configure AWS DEMO Credentials
+      - name: Share AMI with DEMO account
+        run: |
+          aws ec2 modify-image-attribute \
+            --image-id ${{ steps.extract_ami.outputs.ami_id }} \
+            --launch-permission "Add=[{UserId=${{ env.DEMO_ACCOUNT_ID }}}]"
+
+      - name: Configure AWS Credentials (DEMO)
         uses: aws-actions/configure-aws-credentials@v2
         with:
           aws-access-key-id: ${{ secrets.DEMO_AWS_ACCESS_KEY }}
           aws-secret-access-key: ${{ secrets.DEMO_AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      # Get current Launch Template
-      - name: Get Launch Template info
-        id: get_launch_template
+      - name: Get Launch Template ID by Prefix
+        id: get_lt
         run: |
-          LAUNCH_TEMPLATE_NAME="${{ secrets.LAUNCH_TEMPLATE_PREFIX }}"
-          LAUNCH_TEMPLATE_INFO=$(aws ec2 describe-launch-templates --launch-template-names "$LAUNCH_TEMPLATE_NAME" --query 'LaunchTemplates[0]')
-          LAUNCH_TEMPLATE_ID=$(echo $LAUNCH_TEMPLATE_INFO | jq -r '.LaunchTemplateId')
-          LAUNCH_TEMPLATE_DEFAULT_VERSION=$(echo $LAUNCH_TEMPLATE_INFO | jq -r '.DefaultVersionNumber')
+          LT_ID=$(aws ec2 describe-launch-templates \
+            --filters "Name=launch-template-name,Values=${{ env.LAUNCH_TEMPLATE_PREFIX }}*" \
+            --query 'LaunchTemplates[0].LaunchTemplateId' \
+            --output text)
           
-          echo "launch_template_id=$LAUNCH_TEMPLATE_ID" >> $GITHUB_OUTPUT
-          echo "launch_template_default_version=$LAUNCH_TEMPLATE_DEFAULT_VERSION" >> $GITHUB_OUTPUT
-          echo "Found Launch Template $LAUNCH_TEMPLATE_NAME with ID $LAUNCH_TEMPLATE_ID, default version $LAUNCH_TEMPLATE_DEFAULT_VERSION"
+          # Get current default version
+          DEFAULT_VERSION=$(aws ec2 describe-launch-templates \
+            --launch-template-ids $LT_ID \
+            --query 'LaunchTemplates[0].DefaultVersionNumber' \
+            --output text)
+          
+          echo "lt_id=$LT_ID" >> $GITHUB_OUTPUT
+          echo "default_version=$DEFAULT_VERSION" >> $GITHUB_OUTPUT
+          echo "Found Launch Template with ID $LT_ID, default version $DEFAULT_VERSION"
 
-      # Create new Launch Template version
-      - name: Create new Launch Template version
-        id: create_lt_version
+      - name: Create New Launch Template Version
+        id: lt_version
         run: |
-          LAUNCH_TEMPLATE_ID="${{ steps.get_launch_template.outputs.launch_template_id }}"
-          CURRENT_VERSION="${{ steps.get_launch_template.outputs.launch_template_default_version }}"
-          
           # Create new version with updated AMI ID
-          NEW_VERSION=$(aws ec2 create-launch-template-version \
-            --launch-template-id "$LAUNCH_TEMPLATE_ID" \
+          VERSION=$(aws ec2 create-launch-template-version \
+            --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
             --version-description "Updated AMI to ${{ steps.extract_ami.outputs.ami_id }}" \
-            --source-version "$CURRENT_VERSION" \
-            --launch-template-data "{\"ImageId\": \"${{ steps.extract_ami.outputs.ami_id }}\"}" \
+            --source-version ${{ steps.get_lt.outputs.default_version }} \
+            --launch-template-data "{\"ImageId\":\"${{ steps.extract_ami.outputs.ami_id }}\"}" \
             --query 'LaunchTemplateVersion.VersionNumber' \
             --output text)
           
-          echo "New Launch Template version created: $NEW_VERSION"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          
-          # Set as default version
-          aws ec2 modify-launch-template \
-            --launch-template-id "$LAUNCH_TEMPLATE_ID" \
-            --default-version "$NEW_VERSION"
-          
-          echo "Set version $NEW_VERSION as default"
+          echo "new_version=$VERSION" >> $GITHUB_OUTPUT
+          echo "New Launch Template version created: $VERSION"
 
-      # Start instance refresh
-      - name: Start instance refresh
-        id: start_refresh
+      - name: Set Default Launch Template Version
         run: |
-          ASG_NAME="${{ secrets.ASG_NAME }}"
+          aws ec2 modify-launch-template \
+            --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
+            --default-version ${{ steps.lt_version.outputs.new_version }}
           
+          echo "Set version ${{ steps.lt_version.outputs.new_version }} as default"
+
+      - name: Start Instance Refresh
+        id: refresh
+        run: |
           REFRESH_ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name "$ASG_NAME" \
+            --auto-scaling-group-name ${{ env.ASG_NAME }} \
             --preferences '{"MinHealthyPercentage": 90, "InstanceWarmup": 300}' \
             --query 'InstanceRefreshId' \
             --output text)
@@ -138,28 +158,22 @@ jobs:
           echo "Started instance refresh with ID: $REFRESH_ID"
           echo "refresh_id=$REFRESH_ID" >> $GITHUB_OUTPUT
 
-      # Wait for instance refresh to complete
-      - name: Wait for instance refresh to complete
+      - name: Wait for Instance Refresh to Complete
         run: |
-          ASG_NAME="${{ secrets.ASG_NAME }}"
-          REFRESH_ID="${{ steps.start_refresh.outputs.refresh_id }}"
-          
-          echo "Waiting for instance refresh to complete..."
-          
           while true; do
             STATUS=$(aws autoscaling describe-instance-refreshes \
-              --auto-scaling-group-name "$ASG_NAME" \
-              --instance-refresh-ids "$REFRESH_ID" \
+              --auto-scaling-group-name ${{ env.ASG_NAME }} \
+              --instance-refresh-ids ${{ steps.refresh.outputs.refresh_id }} \
               --query 'InstanceRefreshes[0].Status' \
               --output text)
             
-            echo "Current status: $STATUS"
+            echo "Current Status: $STATUS"
             
             if [[ "$STATUS" == "Successful" ]]; then
               echo "Instance refresh completed successfully!"
-              break
+              exit 0
             elif [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" ]]; then
-              echo "Instance refresh failed or was cancelled."
+              echo "Instance refresh failed."
               exit 1
             fi
             
