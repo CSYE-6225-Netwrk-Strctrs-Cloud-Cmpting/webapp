@@ -94,20 +94,33 @@ jobs:
       - name: Get Launch Template ID by Prefix
         id: get_lt
         run: |
+          echo "Looking for launch template with prefix: ${{ env.LAUNCH_TEMPLATE_PREFIX }}"
+          
+          # List all launch templates to help debug
+          aws ec2 describe-launch-templates --output json
+          
+          # Try to get the launch template ID
           LT_ID=$(aws ec2 describe-launch-templates \
             --filters "Name=launch-template-name,Values=${{ env.LAUNCH_TEMPLATE_PREFIX }}*" \
             --query 'LaunchTemplates[0].LaunchTemplateId' \
             --output text)
           
+          if [[ "$LT_ID" == "None" || -z "$LT_ID" ]]; then
+            echo "ERROR: No launch template found with prefix ${{ env.LAUNCH_TEMPLATE_PREFIX }}"
+            exit 1
+          fi
+          
+          echo "Found Launch Template with ID: $LT_ID"
+          
           # Get current default version
           DEFAULT_VERSION=$(aws ec2 describe-launch-templates \
-            --launch-template-ids $LT_ID \
+            --launch-template-ids "$LT_ID" \
             --query 'LaunchTemplates[0].DefaultVersionNumber' \
             --output text)
           
           echo "lt_id=$LT_ID" >> $GITHUB_OUTPUT
           echo "default_version=$DEFAULT_VERSION" >> $GITHUB_OUTPUT
-          echo "Found Launch Template with ID $LT_ID, default version $DEFAULT_VERSION"
+          echo "Default version: $DEFAULT_VERSION"
 
       - name: Create New Launch Template Version
         id: lt_version
