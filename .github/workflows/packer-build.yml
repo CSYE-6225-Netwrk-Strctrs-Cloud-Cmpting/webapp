@@ -15,7 +15,7 @@ jobs:
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_PROFILE: dev
+      AWS_PROFILE: dev-account
       DEMO_PROFILE: demo
       S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
       DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
