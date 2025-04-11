@@ -1,4 +1,7 @@
+
 name: Build and Deploy on PR Merge
+
+
 
 on:
   pull_request:
@@ -9,15 +12,18 @@ on:
 
 jobs:
   deploy:
+
     # Only run when the PR is merged (not when it's just closed without merging)
+
     if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     env:
       AWS_REGION: ${{ secrets.AWS_REGION }}
       AWS_PROFILE: dev
-      DEV_PROFILE: dev
+
       DEMO_PROFILE: demo
+
       DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
       LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
       ASG_NAME: ${{ secrets.ASG_NAME }}
@@ -85,11 +91,13 @@ jobs:
         id: extract_ami
         run: |
           AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
+
           if [ -z "$AMI_ID" ]; then
             echo "ERROR: AMI ID not found."
             exit 1
           fi
           echo "AMI ID created: $AMI_ID"
+
           echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
 
       - name: Share AMI with DEMO account
@@ -111,7 +119,7 @@ jobs:
           LT_ID=$(aws ec2 describe-launch-templates \
             --filters "Name=launch-template-name,Values=${{ env.LAUNCH_TEMPLATE_PREFIX }}*" \
             --query 'LaunchTemplates[0].LaunchTemplateId' \
-            --output text)
+            
           
           # Get current default version
           DEFAULT_VERSION=$(aws ec2 describe-launch-templates \
@@ -123,9 +131,11 @@ jobs:
           echo "default_version=$DEFAULT_VERSION" >> $GITHUB_OUTPUT
           echo "Found Launch Template with ID $LT_ID, default version $DEFAULT_VERSION"
 
+
       - name: Create New Launch Template Version
         id: lt_version
         run: |
+
           # Create new version with updated AMI ID
           VERSION=$(aws ec2 create-launch-template-version \
             --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
@@ -143,19 +153,23 @@ jobs:
           aws ec2 modify-launch-template \
             --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
             --default-version ${{ steps.lt_version.outputs.new_version }}
+
           
           echo "Set version ${{ steps.lt_version.outputs.new_version }} as default"
+
 
       - name: Start Instance Refresh
         id: refresh
         run: |
           REFRESH_ID=$(aws autoscaling start-instance-refresh \
             --auto-scaling-group-name ${{ env.ASG_NAME }} \
+
             --preferences '{"MinHealthyPercentage": 90, "InstanceWarmup": 300}' \
             --query 'InstanceRefreshId' \
             --output text)
           
           echo "Started instance refresh with ID: $REFRESH_ID"
+
           echo "refresh_id=$REFRESH_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for Instance Refresh to Complete
@@ -166,6 +180,7 @@ jobs:
               --instance-refresh-ids ${{ steps.refresh.outputs.refresh_id }} \
               --query 'InstanceRefreshes[0].Status' \
               --output text)
+
             
             echo "Current Status: $STATUS"
             
@@ -180,3 +195,4 @@ jobs:
             echo "Waiting 30 seconds before checking again..."
             sleep 30
           done
+
