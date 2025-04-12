@@ -11,6 +11,10 @@ variable "AWS_REGION" {
   default = "us-east-1"
 }
 
+variable "AWS_PROFILE" {
+  default = "dev"
+}
+
 variable "demo_account_ids" {
   description = "List of AWS Account IDs to share AMI with"
   type        = list(string)
@@ -18,7 +22,7 @@ variable "demo_account_ids" {
 }
 
 variable "inst_type" {
-  default = "t2.micro"
+  default = "t3.micro"
 }
 
 variable "S3_BUCKET_NAME" {
@@ -27,6 +31,7 @@ variable "S3_BUCKET_NAME" {
 
 source "amazon-ebs" "ubuntu" {
   ami_name      = "ubuntu-24.04-{{timestamp}}"
+  profile       = var.AWS_PROFILE
   region        = var.AWS_REGION
   source_ami    = "ami-0fe67b8200454bad4"
   instance_type = var.inst_type
