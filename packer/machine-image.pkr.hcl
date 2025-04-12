@@ -33,7 +33,7 @@ source "amazon-ebs" "ubuntu" {
   ami_name      = "ubuntu-24.04-{{timestamp}}"
   profile       = var.AWS_PROFILE
   region        = var.AWS_REGION
-  source_ami    = "ami-0fe67b8200454bad4"
+  source_ami    = "ami-053b0d53c279acc90"
   instance_type = var.inst_type
   ssh_username  = "ubuntu"
 
@@ -63,25 +63,20 @@ build {
   provisioner "shell" {
     inline = [
       "export DEBIAN_FRONTEND=noninteractive",
-      "sudo apt-get update -y",
-      
-      # Clean the package cache and hold problematic packages at specific versions
-      "sudo apt-get clean",
-      "sudo apt-get install -y apt-utils",
-      
-      # Pin the python3-software-properties to the version required by software-properties-common
-      "sudo apt-get install -y python3-software-properties=0.99.49.1",
-      "sudo apt-mark hold python3-software-properties",
-      "sudo apt-get install -y software-properties-common",
-      
+      "sudo apt update -y",
+
+      # Basic tools & libraries
+      "sudo apt install -y software-properties-common",
       "sudo add-apt-repository universe",
       "sudo apt-get update --fix-missing",
-      
-      # SSL packages handling - using a safer approach
-      "sudo apt-get install -y --allow-downgrades --allow-change-held-packages libssl-dev",
 
-      # Install Node.js and other packages
-      "sudo apt-get install -y nodejs npm unzip",
+      # Optional: Reset SSL libraries if needed
+      "sudo apt-get remove -y --purge libssl-dev || true",
+      "sudo apt-get autoremove -y || true",
+      "sudo apt-get install -y libssl3 libssl-dev",
+
+      # Install Node.js, unzip, etc.
+      "sudo apt install -y nodejs npm unzip",
 
       # Create user and group
       "sudo groupadd -f csye6225",
