@@ -14,7 +14,7 @@ jobs:
 
     env:
       AWS_REGION: us-east-1
-      AWS_PROFILE: dev
+      AWS_PROFILE: dev-account
       S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
       DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
       LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
