@@ -1,44 +1,295 @@
-name: Packer Validation
-
+name: CI/CD on PR Merge
 on:
   pull_request:
+    types:
+      - closed
     branches:
       - main
 
 jobs:
-  validate:
+  deploy:
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
+    env:
+      AWS_REGION: us-east-1
+      S3_BUCKET_NAME: ${{ secrets.S3_BUCKET_NAME }}
+      DEMO_ACCOUNT_ID: ${{ secrets.DEMO_ACCOUNT_ID }}
+      LAUNCH_TEMPLATE_PREFIX: ${{ secrets.LAUNCH_TEMPLATE_PREFIX }}
+      ASG_NAME: ${{ secrets.ASG_NAME }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0  # Fetch all history for proper versioning
+
+      - name: Verify required files exist
+        run: |
+          if [ ! -f webapp.zip ]; then
+            echo "ERROR: webapp.zip not found!"
+            exit 1
+          fi
+
+          if [ ! -f packer/cloudwatch-agent-config.json ]; then
+            echo "ERROR: packer/cloudwatch-agent-config.json not found!"
+            exit 1
+          fi
+
+          if [ ! -f packer/machine-image.pkr.hcl ]; then
+            echo "ERROR: packer/machine-image.pkr.hcl not found!"
+            exit 1
+          fi
+
+          echo "All required files exist."
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'  # Added caching for faster builds
+
+      - name: Install Dependencies
+        run: npm ci  # Use ci instead of install for more reliable builds
+
+      - name: Run Unit Tests
+        run: npm test
 
       - name: Install Packer
         uses: hashicorp/setup-packer@v2
         with:
-          version: latest
+          version: '1.9.1'  # Using a specific version instead of 'latest' for stability
 
-      - name: Ensure webapp.zip Exists in Root
+      - name: Configure AWS Credentials (DEV)
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Debug Packer Template
         run: |
-          if [ ! -f "webapp.zip" ]; then 
-            echo " ERROR: webapp.zip not found in root directory!";
-            exit 1;
-          else
-            echo " webapp.zip exists, proceeding..."
+          echo "Validating Packer template..."
+          packer validate -syntax-only packer/machine-image.pkr.hcl
+
+          echo "Inspecting Packer template structure..."
+          cat packer/machine-image.pkr.hcl | grep -v "#" # Show non-comment lines
+
+      - name: Build AMI with Packer
+        id: packer_build
+        run: |
+          echo "Initializing Packer..."
+          packer init packer/machine-image.pkr.hcl
+
+          echo "Validating Packer template..."
+          packer validate packer/machine-image.pkr.hcl
+
+          echo "Building AMI..."
+          # Adding -on-error=ask to get more information when failures occur
+          PACKER_LOG=1 packer build \
+            -var "AWS_REGION=${{ env.AWS_REGION }}" \
+            -var "S3_BUCKET_NAME=${{ env.S3_BUCKET_NAME }}" \
+            -var "demo_account_ids=[\"${{ env.DEMO_ACCOUNT_ID }}\"]" \
+            packer/machine-image.pkr.hcl | tee output.log
+
+          # Verify if packer command was successful
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "Packer build failed"
+            cat output.log
+            exit 1
           fi
 
-      - name: Copy webapp.zip to /tmp/
+          echo "AMI build completed successfully!"
+
+      - name: Extract AMI ID
+        id: extract_ami
         run: |
-          cp webapp.zip /tmp/webapp.zip
-          echo " webapp.zip copied to /tmp/"
-          ls -lah /tmp/webapp.zip
+          AMI_ID=$(grep -oP 'ami-[a-zA-Z0-9]+' output.log | tail -1)
 
-      - name: Initialize Packer
-        run: packer init packer/machine-image.pkr.hcl
+          if [ -z "$AMI_ID" ]; then
+            echo "Failed to extract AMI ID from output"
+            cat output.log
+            exit 1
+          fi
 
-      - name: Format Packer Configuration
+          echo "Extracted AMI ID: $AMI_ID"
+          echo "ami_id=$AMI_ID" >> $GITHUB_OUTPUT
+
+      - name: Share AMI with DEMO account
         run: |
-          packer fmt -check packer/machine-image.pkr.hcl
+          echo "Sharing AMI ${{ steps.extract_ami.outputs.ami_id }} with account ${{ env.DEMO_ACCOUNT_ID }}"
 
-      - name: Validate Packer Configuration
-        run: packer validate packer/machine-image.pkr.hcl
-      
+          # Check if the AMI is already shared
+          SHARED_STATUS=$(aws ec2 describe-image-attribute \
+            --image-id ${{ steps.extract_ami.outputs.ami_id }} \
+            --attribute launchPermission \
+            --query "LaunchPermissions[?UserId=='${{ env.DEMO_ACCOUNT_ID }}'].UserId" \
+            --output text)
+
+          if [ "$SHARED_STATUS" == "${{ env.DEMO_ACCOUNT_ID }}" ]; then
+            echo "AMI is already shared with ${{ env.DEMO_ACCOUNT_ID }}"
+          else
+            aws ec2 modify-image-attribute \
+              --image-id ${{ steps.extract_ami.outputs.ami_id }} \
+              --launch-permission "Add=[{UserId=${{ env.DEMO_ACCOUNT_ID }}}]"
+            echo "AMI successfully shared"
+          fi
+
+      - name: Wait for AMI to be available
+        run: |
+          echo "Waiting for AMI to be available in source account..."
+          while true; do
+            STATUS=$(aws ec2 describe-images --image-ids ${{ steps.extract_ami.outputs.ami_id }} --query 'Images[0].State' --output text)
+            echo "Current AMI status: $STATUS"
+            if [ "$STATUS" = "available" ]; then
+              echo "AMI is now available."
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Reconfigure AWS Credentials for DEMO
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.DEMO_AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.DEMO_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Wait for AMI to be available in DEMO account
+        run: |
+          echo "Waiting for AMI to be available in DEMO account..."
+          MAX_ATTEMPTS=30
+          ATTEMPT=0
+
+          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+            ATTEMPT=$((ATTEMPT+1))
+            echo "Attempt $ATTEMPT of $MAX_ATTEMPTS"
+
+            AMI_STATUS=$(aws ec2 describe-images --owners ${{ env.DEMO_ACCOUNT_ID }} --image-ids ${{ steps.extract_ami.outputs.ami_id }} --query 'Images[0].State' --output text 2>/dev/null || echo "pending")
+
+            if [ "$AMI_STATUS" = "available" ]; then
+              echo "AMI is now available in DEMO account."
+              break
+            elif [ $ATTEMPT -eq $MAX_ATTEMPTS ]; then
+              echo "Timed out waiting for AMI to be available in DEMO account."
+              echo "Continuing with deployment process anyway..."
+              break
+            fi
+
+            echo "AMI status in DEMO account: $AMI_STATUS. Waiting 10 seconds..."
+            sleep 10
+          done
+
+      - name: Get Launch Template ID by Prefix
+        id: get_lt
+        run: |
+          echo "Finding launch template with prefix: ${{ env.LAUNCH_TEMPLATE_PREFIX }}"
+
+          LT_ID=$(aws ec2 describe-launch-templates \
+            --filters "Name=launch-template-name,Values=${{ env.LAUNCH_TEMPLATE_PREFIX }}*" \
+            --query 'LaunchTemplates[0].LaunchTemplateId' \
+            --output text)
+
+          if [ "$LT_ID" = "None" ] || [ -z "$LT_ID" ]; then
+            echo "No launch template found with prefix ${{ env.LAUNCH_TEMPLATE_PREFIX }}"
+            exit 1
+          fi
+
+          echo "Found launch template ID: $LT_ID"
+          echo "lt_id=$LT_ID" >> $GITHUB_OUTPUT
+
+      - name: Create New Launch Template Version
+        id: new_lt_version
+        run: |
+          echo "Creating new launch template version with AMI: ${{ steps.extract_ami.outputs.ami_id }}"
+
+          VERSION=$(aws ec2 create-launch-template-version \
+            --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
+            --source-version '$Latest' \
+            --launch-template-data "{\"ImageId\":\"${{ steps.extract_ami.outputs.ami_id }}\"}" \
+            --query 'LaunchTemplateVersion.VersionNumber' \
+            --output text)
+
+          if [ -z "$VERSION" ]; then
+            echo "Failed to create new launch template version"
+            exit 1
+          fi
+
+          echo "Created launch template version: $VERSION"
+          echo "new_version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set Default Launch Template Version
+        run: |
+          echo "Setting default launch template version to: ${{ steps.new_lt_version.outputs.new_version }}"
+
+          aws ec2 modify-launch-template \
+            --launch-template-id ${{ steps.get_lt.outputs.lt_id }} \
+            --default-version ${{ steps.new_lt_version.outputs.new_version }}
+
+          echo "Default launch template version updated successfully"
+
+      - name: Start Instance Refresh
+        id: start_refresh
+        run: |
+          echo "Starting instance refresh for ASG: ${{ env.ASG_NAME }}"
+
+          REFRESH_ID=$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name ${{ env.ASG_NAME }} \
+            --preferences '{"MinHealthyPercentage": 90, "InstanceWarmup": 300}' \
+            --query 'InstanceRefreshId' --output text)
+
+          if [ -z "$REFRESH_ID" ]; then
+            echo "Failed to start instance refresh"
+            exit 1
+          fi
+
+          echo "Started instance refresh with ID: $REFRESH_ID"
+          echo "refresh_id=$REFRESH_ID" >> $GITHUB_OUTPUT
+
+      - name: Wait for Instance Refresh to Complete
+        run: |
+          echo "Waiting for instance refresh to complete..."
+          TIMEOUT=1800  # 30 minutes timeout
+          START_TIME=$(date +%s)
+
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED=$((CURRENT_TIME - START_TIME))
+
+            if [ $ELAPSED -gt $TIMEOUT ]; then
+              echo "Timeout waiting for instance refresh to complete"
+              exit 1
+            fi
+
+            STATUS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name ${{ env.ASG_NAME }} \
+              --instance-refresh-ids ${{ steps.start_refresh.outputs.refresh_id }} \
+              --query 'InstanceRefreshes[0].Status' \
+              --output text)
+
+            PROGRESS=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name ${{ env.ASG_NAME }} \
+              --instance-refresh-ids ${{ steps.start_refresh.outputs.refresh_id }} \
+              --query 'InstanceRefreshes[0].PercentageComplete' \
+              --output text)
+
+            echo "Current status: $STATUS - Progress: $PROGRESS%"
+
+            if [ "$STATUS" == "Successful" ]; then
+              echo "Instance refresh completed successfully."
+              exit 0
+            elif [ "$STATUS" == "Failed" ] || [ "$STATUS" == "Cancelled" ]; then
+              echo "Instance refresh failed or was cancelled."
+
+              # Get more details about the failure
+              FAILURE_REASON=$(aws autoscaling describe-instance-refreshes \
+                --auto-scaling-group-name ${{ env.ASG_NAME }} \
+                --instance-refresh-ids ${{ steps.start_refresh.outputs.refresh_id }} \
+                --query 'InstanceRefreshes[0].StatusReason' \
+                --output text)
+
+              echo "Failure reason: $FAILURE_REASON"
+              exit 1
+            fi
+
+            sleep 30
+          done
