@@ -65,10 +65,15 @@ build {
       "export DEBIAN_FRONTEND=noninteractive",
       "sudo apt-get update -y",
       
-      # Properly handle package dependencies by careful ordering and ensuring consistent versions
+      # Clean the package cache and hold problematic packages at specific versions
+      "sudo apt-get clean",
       "sudo apt-get install -y apt-utils",
-      "sudo apt-get upgrade -y python3-software-properties", # Upgrade the problematic package first
-      "sudo apt-get install -y software-properties-common",  # Now install the dependent package
+      
+      # Pin the python3-software-properties to the version required by software-properties-common
+      "sudo apt-get install -y python3-software-properties=0.99.49.1",
+      "sudo apt-mark hold python3-software-properties",
+      "sudo apt-get install -y software-properties-common",
+      
       "sudo add-apt-repository universe",
       "sudo apt-get update --fix-missing",
       
