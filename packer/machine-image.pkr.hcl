@@ -12,7 +12,7 @@ variable "AWS_REGION" {
 }
 
 variable "AWS_PROFILE" {
-  default = "dev"
+  default = "dev-account"
 }
 
 variable "demo_account_ids" {
