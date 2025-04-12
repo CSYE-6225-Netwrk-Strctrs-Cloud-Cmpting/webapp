@@ -164,7 +164,9 @@ jobs:
             ATTEMPT=$((ATTEMPT+1))
             echo "Attempt $ATTEMPT of $MAX_ATTEMPTS"
 
-            AMI_STATUS=$(aws ec2 describe-images --owners ${{ env.DEMO_ACCOUNT_ID }} --image-ids ${{ steps.extract_ami.outputs.ami_id }} --query 'Images[0].State' --output text 2>/dev/null || echo "pending")
+            AMI_STATUS=$(aws ec2 describe-images --image-ids ${{ steps.extract_ami.outputs.ami_id }} --query 'Images[0].State' --output text 2>/dev/null || echo "pending")
+
+
 
             if [ "$AMI_STATUS" = "available" ]; then
               echo "AMI is now available in DEMO account."
