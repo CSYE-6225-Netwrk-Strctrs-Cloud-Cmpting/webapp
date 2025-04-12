@@ -63,19 +63,20 @@ build {
   provisioner "shell" {
     inline = [
       "export DEBIAN_FRONTEND=noninteractive",
-      "sudo apt update -y",
-
-      # Fix SSL issues
-      "sudo apt install -y software-properties-common",
+      "sudo apt-get update -y",
+      
+      # Properly handle package dependencies by careful ordering and ensuring consistent versions
+      "sudo apt-get install -y apt-utils",
+      "sudo apt-get upgrade -y python3-software-properties", # Upgrade the problematic package first
+      "sudo apt-get install -y software-properties-common",  # Now install the dependent package
       "sudo add-apt-repository universe",
       "sudo apt-get update --fix-missing",
-      "sudo apt-get remove -y --purge libssl-dev",
-      "sudo apt-get autoremove -y",
-      "sudo apt-get install -y --allow-downgrades --allow-change-held-packages libssl3t64=3.0.13-0ubuntu3.5",
+      
+      # SSL packages handling - using a safer approach
       "sudo apt-get install -y --allow-downgrades --allow-change-held-packages libssl-dev",
 
       # Install Node.js and other packages
-      "sudo apt install -y nodejs npm unzip",
+      "sudo apt-get install -y nodejs npm unzip",
 
       # Create user and group
       "sudo groupadd -f csye6225",
@@ -148,4 +149,3 @@ build {
     ]
   }
 }
-
