@@ -1,13 +1,14 @@
 name: CI/CD on PR Merge
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types:
+      - closed
     branches:
       - main
 
 jobs:
   deploy:
-     
+    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     env:
       AWS_REGION: us-east-1
@@ -294,8 +295,6 @@ jobs:
 
             sleep 30
           done
-
-
 
 
 
