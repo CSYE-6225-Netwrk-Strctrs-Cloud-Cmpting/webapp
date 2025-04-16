@@ -76,8 +76,8 @@ build {
       "sudo apt-get install -y libssl3 libssl-dev",
 
       # Install Node.js, unzip, etc.
-      "sudo apt install -y nodejs npm unzip",
-
+      "curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -",
+      "sudo apt-get install -y nodejs unzip",
       # Create user and group
       "sudo groupadd -f csye6225",
       "sudo useradd -r -s /usr/sbin/nologin -g csye6225 csye6225 || echo 'User already exists'",
